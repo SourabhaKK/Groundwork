@@ -1,0 +1,101 @@
+# Tasks — Phased Build Plan
+
+Each phase must be explained and approved (per `workflows.md`) before Claude Code implements it. Phases are sequential; sub-phases within a phase can be parallelised by Claude Code only after the phase-level decision is confirmed.
+
+**Revised per LLM Council audit round 2** — five further fixes:
+4. Added **Phase 2.3a — Source Authority Taxonomy**: the confidence rule and extraction prompts both assumed a source-tiering mechanism that was never actually defined. Now it is, before anything downstream depends on it.
+5. **Conflict severity** is now explicitly defined (minor vs. major), not left as an undefined term inside the confidence rule.
+6. **Phase 2.5 stretch item** expanded to include PSC (persons-with-significant-control / beneficial ownership) data — same API family, zero extra cost, directly relevant to underwriting.
+7. **Phase 0.7's mock subject is locked**: Monzo Bank Ltd — well-documented, strong filing history, heavy trade press and review coverage, outside Allica's direct competitive space.
+8. **Phase 7.1** now requires the real built output to be checked against the Phase 0.7 mock for structural conformance, closing the loop the first audit left open.
+
+## Phase 0 — Project Setup & Core Infrastructure
+
+**Time budget: ≤1 day of the 6-day window.** Three council audit rounds have progressively hardened this plan; round 3 confirmed no further structural issues remain (diminishing returns reached — see `workflows.md` addendum). **This is the final planning revision. No further audit rounds. Build starts immediately after Phase 0 is complete.**
+
+- 0.1 Initialise GitHub repo (private), branch strategy (`main` + feature branches)
+- 0.2 Scaffold `pyproject.toml`, dependency lock, `.env.example` for API keys (Companies House, Tavily, Anthropic, Google/Gemini, demo access token)
+- 0.3 Directory structure: `src/agent/`, `src/data_sources/`, `src/report/`, `src/api/`, `frontend/`, `tests/`
+- 0.4 CI skeleton (GitHub Actions: lint + test on push)
+- 0.5 **Token-gate the FastAPI app skeleton** (shared access token check) + rate limiting (per-IP and/or global request cap) — built now so every phase after this is developed and tested against real auth/rate constraints, not exempted from them until Phase 6
+- 0.6 **LLM provider circuit breaker skeleton**: Claude (Haiku/Sonnet) primary, Gemini 2.0 Flash fallback, auto-switch on N consecutive failures, logged — built now so Phases 2-5 call LLMs through this router from day one, never directly against a single provider
+- 0.7 **Example report mock — requires its own explicit confirmation, separate from 0.1–0.6's scaffolding approval, since this is a design decision, not infrastructure.** Subject: **Monzo Bank Ltd**, chosen for strong Companies House filing history, heavy trade press coverage, and genuine customer reviews — gives a real HIGH-confidence worked example, and sits outside Allica's direct competitive space. Hand-write one realistic full report (all 3 sections, citations, per-section confidence bands) in the exact target output format. This is the concrete definition of "done" for Phase 5 — build nothing in Phases 4-5 without this existing first.
+- 0.8 `README.md` skeleton (filled in fully in Phase 6)
+
+## Phase 1 — Company Resolution & Disambiguation
+- 1.1 Companies House API client: search-by-name, lookup-by-number
+- 1.2 Disambiguation logic: multiple-match handling (return candidates with distinguishing detail — status, SIC code, address — not just names)
+- 1.3 Failure handling: no exact match (including rebrands/trading names vs. registered legal names — a real-world case, not an edge case), dissolved company, malformed input
+- 1.4 Unit tests: exact match, ambiguous match, no match, invalid input
+
+## Phase 2 — Data Gathering Layer
+- 2.1 Companies House deep pull: filing history, officers, SIC codes, company status
+- 2.2 Web/news/trade-press research via Tavily: business model signals, competitor mentions, review/reputation signals
+- 2.3 Source-tagging: every fetched document/snippet stored with its URL, source type, and retrieval timestamp
+- 2.3a **Source authority taxonomy** — a short allowlist/tagging function, not a research project: `official` (Companies House) → `trade_press` (maintained allowlist of recognized UK business/trade outlets) → `review` (review platforms) → `general_web` (everything else, lowest weight). Required before Phase 4.2's per-source-type extraction prompts and Phase 5.4's confidence rule, both of which assume this tiering exists.
+- 2.4 Rate-limit / failure handling per source (what happens if Companies House or Tavily is down or empty) — calls route through the Phase 0.6 circuit breaker
+- 2.5 **[Stretch — if time permits after Phase 7]** Filing-pattern signals from Companies House: SIC code changes over time, officer turnover rate, accounts-filing punctuality, **plus PSC (persons-with-significant-control / beneficial ownership) data** — same API family, zero extra integration cost, and directly relevant to an underwriting context (who actually controls this company). Feeds into the Company Quality Signals section. Log as explicitly deferred in the design note if not completed; do not let this expand Phase 2's core scope.
+- 2.6 Unit tests with mocked API responses
+
+## Phase 3 — Agent Orchestration (LangGraph)
+
+**Implementation-order note:** Phase 3.5 (below) depends on Phase 4's `EvidenceClaim` extraction schema existing to evaluate sufficiency. Build Phase 4.1 (the schema) before wiring 3.5's conditional edge — the phases are still presented in this order because 3.1–3.4 (graph skeleton, stopping condition, fallback routing, logging) don't have that dependency and should be built first.
+
+- 3.1 Define the state graph: nodes for resolve → gather (parallel branches per source) → extract → **evaluate sufficiency → (conditional) re-search or proceed** → synthesize → uncertainty-check → render
+- 3.2 Explicit stopping condition for the gather phase (max tool calls / diminishing-returns heuristic — must be a real, statable rule, not "until it feels done"). This cap also bounds the re-search loop in 3.5 — the agent cannot re-search indefinitely.
+- 3.3 Failure/fallback routing — calls through the Phase 0.6 circuit breaker, plus source-unavailable handling
+- 3.4 Logging of every agent decision (which tool was called, why, what it returned, and — for 3.5 — why a re-search was or wasn't triggered) — this log is what makes Phase 3 auditable for the "Agent design" grading criterion
+- 3.5 **Adaptive re-search loop — the genuine agentic decision point, added to close a Round 1 council finding that was raised but never actioned in Rounds 1–3.** After initial extraction (Phase 4) runs against the first gather pass, evaluate per-section claim sufficiency using the same claim-count logic as Phase 5.4's confidence rule. If a section has fewer claims than the MEDIUM threshold (i.e. it would currently score LOW) **and** the Phase 3.2 tool-call budget isn't exhausted, the graph conditionally routes back to a targeted follow-up gather step with a refined query (e.g. narrower to that specific section's gap) rather than proceeding straight to synthesis. This is implemented as a LangGraph conditional edge keyed on runtime extraction state — this is what actually distinguishes an agent from a fixed pipeline: the control flow itself depends on what was found, not just on which step comes next in a predetermined order.
+
+## Phase 4 — Structured Extraction
+- 4.1 Pydantic schemas: `EvidenceClaim` (text, source_url, source_type, confidence), per-section schemas
+- 4.2 Extraction prompts per source type (filings vs. news vs. reviews need different extraction framing)
+- 4.3 Deduplication / conflict detection across sources (two sources disagree — this must surface, not silently resolve)
+
+## Phase 5 — Report Synthesis & Uncertainty Handling
+- 5.1 Business model summary generation (grounded in extracted claims only) — validate output shape against the Phase 0.7 mock
+- 5.2 Competitive landscape synthesis (structured intensity assessment, not a list) — validate against the Phase 0.7 mock
+- 5.3 Company quality signals synthesis + explicit signal-strength rating per section
+- 5.4 **Uncertainty-scoring rule — explicit, testable function, not a design intention:**
+
+  **Conflict severity, defined first (this rule was previously undefined and is a prerequisite for the scoring logic below):**
+  - **MINOR conflict:** sources differ on phrasing or peripheral detail but agree on the core fact (e.g. two sources give slightly different employee-count estimates, or differing dates for the same event within a plausible range).
+  - **MAJOR conflict:** sources contradict a core fact (e.g. one source states the company was acquired/dissolved while Companies House shows it independently trading; or sources give opposite reputation signals on the same specific claim, not just differing tone).
+
+  ```
+  score_confidence(claims: list[EvidenceClaim]) -> ConfidenceBand
+
+  # Precedence: check MAJOR conflict FIRST, before any other condition.
+  # A MAJOR conflict forces LOW regardless of claim count or source
+  # authority — it is not merely one of several equally-weighted LOW
+  # conditions, it overrides HIGH/MEDIUM outright.
+  if any MAJOR conflict present among claims:
+      return LOW
+
+  HIGH   if len(claims) >= 3 AND
+            at least one claim from an `official` or `trade_press`
+            source (per Phase 2.3a taxonomy)
+  MEDIUM if (1 <= len(claims) <= 2)
+            OR (len(claims) >= 3 AND only MINOR conflicts present)
+  LOW    if len(claims) <= 1
+            OR all claims are tagged `general_web` or a single
+            `review` source only (per Phase 2.3a taxonomy)
+  ```
+  This runs per-section, not once per report — each of the 3 sections gets its own confidence band, since evidence density varies by section (Companies House data is usually strong for business model, often weak for quality signals).
+- 5.5 Render the confidence band visibly per section in the output (badge/label), matching the Phase 0.7 mock — not a disclaimer appended at the end
+- 5.6 Citation rendering: every claim in the final report links back to its source
+- 5.7 **Cross-provider prompt consistency check — closes a Round 1 council finding (Executor) that was named but never fixed in Rounds 1–3.** Sonnet (primary) and Gemini 2.0 Flash (fallback) are different model families; the synthesis prompts from 5.1-5.3 must be validated against both, not just written once and assumed to transfer. Run the same synthesis prompt against both providers on the Phase 0.7 mock's underlying evidence and confirm structurally equivalent output (same section shape, citation format, confidence-band rendering) before considering Phase 5 complete — a fallback that produces a differently-shaped report is a real failure mode, not a cosmetic one.
+
+## Phase 6 — API, Frontend, Deployment
+- 6.1 FastAPI `/report` endpoint (async, streams progress if feasible) — built on top of the Phase 0.5 token-gated skeleton
+- 6.2 Streamlit frontend: input box, disambiguation UI if needed, rendered report (confidence badges + citations), token entry field
+- 6.3 Dockerize the FastAPI service for Cloud Run deployment
+- 6.4 Deploy to **Google Cloud Run** (locked — see `TECH_STACK.md`), verify hosted URL works end-to-end including cold-start behaviour on the *first* request
+- 6.4a **Cold-start mitigation — closes a Round 1 council finding (Contrarian) that was named but never fixed in Rounds 1–3.** A cold Cloud Run container plus a 30-90s agent run could mean an evaluator's first request takes 2+ minutes — bad enough to matter given it's the single most important moment of the whole submission. Fix: a scheduled keep-warm ping (a GitHub Actions cron job hitting a lightweight `/health` endpoint every ~10 minutes) keeps a container warm without needing paid min-instances. Backup: state the cold-start behaviour plainly in the README regardless, so if the ping ever lapses it reads as a disclosed, understood characteristic rather than an unnoticed flaw.
+- 6.5 Full `README.md`: what was built, setup instructions, architecture summary, decisions, how evaluators should test edge cases, the access token needed to use the live demo
+
+## Phase 7 — Testing, Design Note, Audit
+- 7.1 End-to-end test runs: one well-documented company, one thin-evidence company, one ambiguous name, one invalid input — confirm confidence bands behave correctly across all four. **Additionally, diff the real built output for the Monzo Bank Ltd run against the Phase 0.7 mock for structural conformance** (section presence, citation format, confidence-band rendering) — closes the loop so the mock isn't just a discarded planning artifact.
+- 7.2 System design note — **lead with the product and the judgment behind it, not a change-log of tool choices.** Structure: what it does and why it's trustworthy (first) → architecture diagram → key decisions with rejected alternatives → what was deferred and why (Phase 2.5 stretch item goes here if not done) → what would change with more time
+- 7.3 Full self-audit against the brief's 6 evaluation dimensions — explicit checklist pass
+- 7.4 Final repo cleanup, commit history sanity check, submission
