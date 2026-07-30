@@ -114,6 +114,10 @@ Phase 0.1–0.6 and 0.8 are built. Nothing in `TECH_STACK.md` was substituted �
 
 **Known limitation, not a bug:** the rate limiter's counters are in-process. They reset when Cloud Run replaces the container (the likely case), and would multiply if the service scaled past one instance (the unlikely case, bounded by pinning `--max-instances=2` at deploy). Both are disclosed in the README rather than presented as airtight.
 
+## Addendum — Mock-Anchoring Risk (raised during build, Phase 0.7)
+
+A real methodological risk: whoever hand-writes the acceptance target risks unconsciously calibrating it to something the pipeline can comfortably clear, and the Phase 7.1 structural diff only checks shape, not substance. Three fixes applied: (1) mock citations must resolve to real, verified sources, not plausible-sounding invented ones; (2) the mock is explicitly a floor on shape, not a ceiling on quality — the real system is expected to exceed it; (3) Phase 7.1a adds an independent quality rubric that never references the mock, so a run can pass the shape-diff and still fail on substance. This is the intended outcome of that rubric, not a gap in it.
+
 ## Non-Negotiables Carried Over From Earlier Instructions
 
 - Every claim in the final report must be traceable to a source — this must be a structural property of the data model (per `TASKS.md` Phase 4.1's `EvidenceClaim` schema), not something enforced only by prompting.
