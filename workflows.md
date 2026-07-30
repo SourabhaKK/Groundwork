@@ -114,9 +114,17 @@ Phase 0.1–0.6 and 0.8 are built. Nothing in `TECH_STACK.md` was substituted �
 
 **Known limitation, not a bug:** the rate limiter's counters are in-process. They reset when Cloud Run replaces the container (the likely case), and would multiply if the service scaled past one instance (the unlikely case, bounded by pinning `--max-instances=2` at deploy). Both are disclosed in the README rather than presented as airtight.
 
-## Addendum — Mock-Anchoring Risk (raised during build, Phase 0.7)
+## Addendum — Spec Fixes Found by Building and Reading the Mock (Phase 0.7)
 
-A real methodological risk: whoever hand-writes the acceptance target risks unconsciously calibrating it to something the pipeline can comfortably clear, and the Phase 7.1 structural diff only checks shape, not substance. Three fixes applied: (1) mock citations must resolve to real, verified sources, not plausible-sounding invented ones; (2) the mock is explicitly a floor on shape, not a ceiling on quality — the real system is expected to exceed it; (3) Phase 7.1a adds an independent quality rubric that never references the mock, so a run can pass the shape-diff and still fail on substance. This is the intended outcome of that rubric, not a gap in it.
+Constructing and then closely reading the mock against real Monzo/Starling/FCA source material surfaced five real gaps — three in the confidence/taxonomy spec, two in how the mock itself reported its own scoring:
+
+1. **Mock-anchoring risk** (writer of the acceptance target may unconsciously set an easy bar) — mitigated via required source verification, the mock as floor-not-ceiling, and an independent Phase 7.1a rubric that never references the mock. A run can pass the Phase 7.1 shape-diff and still fail 7.1a on substance; that is the intended outcome of that rubric, not a gap in it.
+2. **Confidence-rule precedence bug** (MINOR-conflict downgrade was unreachable) — fixed, MINOR check now runs before count/authority.
+3. **Taxonomy gap** (no tier distinguishing an independent regulator from a company's own self-disclosure) — fixed via `official_registry` / `official_self` split.
+4. **No mechanism to exclude an unreliable-but-worth-mentioning claim from scoring** while still surfacing it in prose — fixed via `counts_toward_confidence` on `EvidenceClaim`.
+5. **The mock's own badge conflated claim count with distinct-source count** — fixed by requiring badges to always state claim count, matching what the rule actually scores on.
+
+None of this changed any of the mock's three confidence bands — verified, not assumed. That the bands survived is not proof the original spec was correct; it's a coincidence of the specific evidence available for this one company.
 
 ## Non-Negotiables Carried Over From Earlier Instructions
 

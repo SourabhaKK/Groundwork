@@ -11,7 +11,7 @@
 ## 1. Business Model Summary
 
 > ### 🟡 MEDIUM
-> **4 sources including the Companies House register and 1 named trade-press outlet — downgraded from HIGH by a MINOR conflict over whether the headline FY2026 profit figure is statutory or adjusted.**
+> **7 claims (6 scored) across 4 sources, including the Companies House register and 1 named trade-press outlet — downgraded from HIGH by a MINOR conflict over whether the headline FY2026 profit figure is statutory or adjusted.**
 
 Monzo Bank Limited is a UK-registered bank, incorporated 18 February 2015 and currently **Active** on the Companies House register, with its registered office at Broadwalk House, 5 Appold Street, London EC2A 2AG. It files under two SIC codes: **64191 (banks)** and **64999 (financial intermediation services not elsewhere classified)** [1].
 
@@ -33,17 +33,19 @@ On the business-banking side, Monzo reports **45% growth in business banking cus
 
 | # | Source | Type | Retrieved |
 |---|---|---|---|
-| 1 | Companies House register — Monzo Bank Limited, no. 09446231 · [find-and-update.company-information.service.gov.uk/company/09446231](https://find-and-update.company-information.service.gov.uk/company/09446231) | `official` | 30 Jul 2026 |
-| 2 | Monzo Bank Limited, *Annual Report FY2026* · [monzo.com/annual-report](https://monzo.com/annual-report) | `official` (company self-disclosure — see note) | 30 Jul 2026 |
+| 1 | Companies House register — Monzo Bank Limited, no. 09446231 · [find-and-update.company-information.service.gov.uk/company/09446231](https://find-and-update.company-information.service.gov.uk/company/09446231) | `official_registry` | 30 Jul 2026 |
+| 2 | Monzo Bank Limited, *Annual Report FY2026* · [monzo.com/annual-report](https://monzo.com/annual-report) | `official_self` | 30 Jul 2026 |
 | 3 | UK Technology News, "Monzo reports strong profitable growth with £1.7bn revenue for FY2026", 19 May 2026 · [uktech.news](https://www.uktech.news/fintech/monzo-reports-strong-profitable-growth-with-1-7bn-revenue-for-fy2026-20260519) | `trade_press` | 30 Jul 2026 |
 | 4 | WhiteSight, "Retail Darling to Business Powerhouse: Monzo's Strategic Expansion Into SME Banking" · [whitesight.net](https://whitesight.net/retail-darling-to-business-powerhouse-monzos-strategic-expansion-into-sme-banking/) | `general_web` | 30 Jul 2026 |
+
+**Excluded from scoring (`counts_toward_confidence = False`):** the ~700,000 business-customer figure from [4] — a single secondary source with no independent corroboration. It remains in the prose above and in the evidence gaps, because it is the only indication of business-segment scale available; it simply does not count toward this section's band.
 
 ---
 
 ## 2. Competitive Landscape Assessment
 
 > ### 🟢 HIGH
-> **3 core claims resting on 2 primary company disclosures and 1 named trade-press outlet. Scope limit stated in the first paragraph below.**
+> **5 claims (3 scored) across 4 sources — 2 primary company disclosures, corroborated by 1 named trade-press outlet. Scope limit stated in the first paragraph below.**
 
 **Scope limit, up front:** this assessment is grounded on the Monzo–Starling comparison, where both companies publish audited primary figures. The wider UK SME-banking share picture rests on a single secondary estimate and is flagged as a gap rather than asserted.
 
@@ -65,17 +67,21 @@ On the business-banking side, Monzo reports **45% growth in business banking cus
 
 | # | Source | Type | Retrieved |
 |---|---|---|---|
-| 1 | Monzo Bank Limited, *Annual Report FY2026* · [monzo.com/annual-report](https://monzo.com/annual-report) | `official` (company self-disclosure) | 30 Jul 2026 |
-| 2 | Starling Bank, "Starling delivers fifth year of profitability and accelerates global growth strategy", 21 May 2026 · [starlingbank.com](https://www.starlingbank.com/news/starling-delivers-fifth-year-of-profitability-and-accelerates-global-growth-strategy/) | `official` (competitor self-disclosure) | 30 Jul 2026 |
+| 1 | Monzo Bank Limited, *Annual Report FY2026* · [monzo.com/annual-report](https://monzo.com/annual-report) | `official_self` | 30 Jul 2026 |
+| 2 | Starling Bank, "Starling delivers fifth year of profitability and accelerates global growth strategy", 21 May 2026 · [starlingbank.com](https://www.starlingbank.com/news/starling-delivers-fifth-year-of-profitability-and-accelerates-global-growth-strategy/) | `official_self` (competitor's own disclosure) | 30 Jul 2026 |
 | 3 | UK Technology News, 19 May 2026 · [uktech.news](https://www.uktech.news/fintech/monzo-reports-strong-profitable-growth-with-1-7bn-revenue-for-fy2026-20260519) | `trade_press` | 30 Jul 2026 |
 | 4 | WhiteSight, "Retail Darling to Business Powerhouse" · [whitesight.net](https://whitesight.net/retail-darling-to-business-powerhouse-monzos-strategic-expansion-into-sme-banking/) | `general_web` | 30 Jul 2026 |
+
+**Excluded from scoring (`counts_toward_confidence = False`):** both claims sourced solely to [4] — the comparative SME customer estimate (~700k Monzo vs ~500k Starling) and the three-way product-differentiation comparison. Neither is independently corroborated, and Starling's own release makes no business-account disclosure to check the first against. Both remain in the prose above, the second as the basis for the strategy comparison and the first explicitly as a gap.
+
+Note that the two `official_self` sources here are the subject's and a competitor's own disclosures. Under Phase 2.3a they clear the HIGH-band authority gate only because the section also carries a non-self claim — [3] — providing corroboration.
 
 ---
 
 ## 3. Company Quality Signals
 
 > ### 🟢 HIGH
-> **Signal strength: strong. 5 claims across an FCA enforcement notice, the Companies House register, and a review-aggregation source. No conflicts detected.**
+> **Signal strength: strong. 5 claims (3 scored) across 3 sources — an FCA enforcement notice and the Companies House register. No conflicts detected. Review data is surfaced in full below but excluded from scoring.**
 
 **Read this band correctly: it rates the strength of the evidence, not the favourability of the finding.** The most significant signal in this section is negative and is HIGH confidence precisely because it is documented in a regulator's own enforcement notice.
 
@@ -87,7 +93,9 @@ On the business-banking side, Monzo reports **45% growth in business banking cus
 
 **Customer sentiment: strongly positive, but the evidence is second-hand.** A review aggregation last updated June 2026 reports Monzo at **4.6/5 on Trustpilot from 68,000+ reviews** and **4.5/5 on Google Play from 170,000+ reviews** [3]. Recurring praise centres on app design, onboarding speed and the Pots savings feature; recurring complaints centre on **payment problems, account freezing, high overdraft charges, and account-creation issues** [3].
 
-**No conflict is recorded between the regulatory finding and customer sentiment, and this is a deliberate classification rather than an oversight.** Under the Phase 5.4 definitions, a MAJOR conflict requires sources to contradict each other on *the same specific claim*. A regulator's finding about historic AML controls and a review platform's aggregate customer-experience score are claims about different things; they are complementary signals, not opposing ones. Flagging them as a conflict would have forced this section to LOW and thereby *suppressed* a well-evidenced negative finding — the opposite of what the confidence mechanism is for.
+**No conflict is recorded between the regulatory finding and customer sentiment, and this is a deliberate classification rather than an oversight.** Under the Phase 5.4 definitions, a MAJOR conflict requires sources to contradict each other on *the same specific claim*. A regulator's finding about historic AML controls and a review platform's aggregate customer-experience score are claims about different things; they are complementary signals, not opposing ones.
+
+Two consequences follow, and it is worth separating them. In *this* section the misclassification would not have changed the band, because the review claims are excluded from scoring anyway and the MAJOR check runs only over scored claims — so the band would have stayed HIGH regardless. But in any section where both claims were scored, calling this a MAJOR conflict would force LOW and thereby *suppress* a well-evidenced negative finding, which is the opposite of what the confidence mechanism exists to do. The classification is load-bearing in general even where it happens to be inert here.
 
 **Worth an underwriter's attention:** the "account freezing" complaint theme [3] is plausibly the customer-facing surface of the very same financial-crime controls the FCA required Monzo to tighten [1]. This is a hypothesis suggested by the juxtaposition, not a documented causal link, and is flagged as such.
 
@@ -101,18 +109,28 @@ On the business-banking side, Monzo reports **45% growth in business banking cus
 
 | # | Source | Type | Retrieved |
 |---|---|---|---|
-| 1 | Financial Conduct Authority, "FCA fines Monzo £21m for failings in financial crime controls", 8 July 2025 · [fca.org.uk](https://www.fca.org.uk/news/press-releases/fca-fines-monzo-21m-failings-financial-crime-controls) | `official` (regulator — see taxonomy note) | 30 Jul 2026 |
-| 2 | Companies House register — Monzo Bank Limited, no. 09446231 · [find-and-update.company-information.service.gov.uk/company/09446231](https://find-and-update.company-information.service.gov.uk/company/09446231) | `official` | 30 Jul 2026 |
+| 1 | Financial Conduct Authority, "FCA fines Monzo £21m for failings in financial crime controls", 8 July 2025 · [fca.org.uk](https://www.fca.org.uk/news/press-releases/fca-fines-monzo-21m-failings-financial-crime-controls) | `official_registry` | 30 Jul 2026 |
+| 2 | Companies House register — Monzo Bank Limited, no. 09446231 · [find-and-update.company-information.service.gov.uk/company/09446231](https://find-and-update.company-information.service.gov.uk/company/09446231) | `official_registry` | 30 Jul 2026 |
 | 3 | Statrys, "Monzo Business Account Review (2026)", last reviewed June 2026 · [statrys.com](https://statrys.com/reviews/monzo-business-account) | `review` (secondary aggregation — see gap note) | 30 Jul 2026 |
+
+**Excluded from scoring (`counts_toward_confidence = False`):** both claims sourced to [3] — the platform ratings and the recurring-complaint themes. These are review figures **substituted from a commercial aggregator because the primary platforms returned HTTP 403**, which is the textbook case for exclusion. They are reported in full in the prose above, including the complaint themes, because customer sentiment is genuinely informative to an underwriter — but a band should not be propped up by numbers we could not read at source.
 
 ---
 
 ## Confidence Scoring Applied (working, for verification)
 
-Per Phase 5.4, scored per section, MAJOR-conflict check first.
+Per Phase 5.4, evaluated per section, conditions checked strictly in order. `Claims` counts every claim in the section; `Scored` counts only those with `counts_toward_confidence = True` (Phase 4.1). `Distinct sources` is shown alongside so the two numbers can never be confused — the rule scores on **claims**, not sources.
 
-| Section | MAJOR conflict? | Claims | Highest source tier | MINOR conflict? | Band |
-|---|---|---|---|---|---|
-| 1. Business model | No | 7 | `official` | **Yes** (adjusted vs statutory PBT) | **MEDIUM** |
-| 2. Competitive landscape | No | 3 core | `official` | No | **HIGH** |
-| 3. Quality signals | No | 5 | `official` | No | **HIGH** |
+| Section | Claims | Scored | Distinct sources | Highest scored tier | MAJOR? | All `general_web` / lone `review`? | MINOR? | Count + authority gate | **Band** |
+|---|---|---|---|---|---|---|---|---|---|
+| 1. Business model | 7 | 6 | 4 | `official_registry` | No | No | **Yes** | (not reached) | **🟡 MEDIUM** |
+| 2. Competitive landscape | 5 | 3 | 4 | `official_self` + `trade_press` | No | No | No | Met | **🟢 HIGH** |
+| 3. Quality signals | 5 | 3 | 3 | `official_registry` | No | No | No | Met | **🟢 HIGH** |
+
+**Step-by-step recomputation under the corrected rule:**
+
+- **Section 1 → MEDIUM.** 6 scored (the ~700k secondary estimate excluded) → not empty. No MAJOR conflict. Not all `general_web`, not a lone `review`. **A MINOR conflict is present** (Monzo labels £172.6m "adjusted profit before tax"; UKTN reports the same figure as statutory PBT) → returns MEDIUM here, **before** the count-and-authority gate is evaluated. Under the old clause order this section would have matched HIGH first (6 ≥ 3, `official_registry` present) and the downgrade would never have fired — this is the precedence bug, caught on a real case rather than in the abstract.
+- **Section 2 → HIGH.** 3 scored (both WhiteSight-only claims excluded) → not empty. No MAJOR. Not all `general_web`. No MINOR. Count-and-authority gate: 3 ≥ 3 ✓, and the gate is satisfied two ways over — the `trade_press` claim [3] qualifies directly, and it also supplies the non-self corroboration that lets the two `official_self` claims count. Had the section rested on Monzo's and Starling's own disclosures alone, the gate would have failed and this would be MEDIUM.
+- **Section 3 → HIGH.** 3 scored (both review claims excluded as aggregator substitutions after a 403) → not empty. No MAJOR — the FCA finding and customer sentiment are claims about different things, not opposing claims about the same thing. Not all `general_web`; not a lone `review` (the two `review` claims are excluded from scoring entirely). No MINOR. Gate: 3 ≥ 3 ✓ with `official_registry` present → HIGH.
+
+**All three bands are unchanged from the pre-fix version.** That is a coincidence of the evidence available for this particular company, not evidence that the original rule was sound — Section 1 previously reached MEDIUM by clause-order accident rather than by the downgrade actually firing, and Sections 2 and 3 previously counted claims that the `counts_toward_confidence` field now correctly excludes.

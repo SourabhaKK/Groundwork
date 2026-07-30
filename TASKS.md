@@ -32,7 +32,14 @@ Each phase must be explained and approved (per `workflows.md`) before Claude Cod
 - 2.1 Companies House deep pull: filing history, officers, SIC codes, company status
 - 2.2 Web/news/trade-press research via Tavily: business model signals, competitor mentions, review/reputation signals
 - 2.3 Source-tagging: every fetched document/snippet stored with its URL, source type, and retrieval timestamp
-- 2.3a **Source authority taxonomy** — a short allowlist/tagging function, not a research project: `official` (Companies House) → `trade_press` (maintained allowlist of recognized UK business/trade outlets) → `review` (review platforms) → `general_web` (everything else, lowest weight). Required before Phase 4.2's per-source-type extraction prompts and Phase 5.4's confidence rule, both of which assume this tiering exists.
+- 2.3a **Source authority taxonomy** — a short allowlist/tagging function, not a research project. Five tiers, highest authority first:
+  - **`official_registry`** — Companies House, FCA, PRA, and other independent regulators. No stake in what they report.
+  - **`official_self`** — the subject company's own regulated disclosures (e.g. an annual report). Primary and audited, but self-interested. Counts toward Phase 5.4's HIGH-band authority gate **only when corroborated by a non-self claim in the same section**.
+  - **`trade_press`** — maintained allowlist of recognized UK business/trade outlets.
+  - **`review`** — review platforms.
+  - **`general_web`** — everything else, lowest weight.
+
+  The `official_registry` / `official_self` split replaces a single `official` tier, which treated an independent regulator and a company's word about itself as equally authoritative. Found by building the Phase 0.7 mock, which had to cite both an FCA enforcement notice and Monzo's own annual report. Required before Phase 4.2's per-source-type extraction prompts and Phase 5.4's confidence rule, both of which assume this tiering exists.
 - 2.4 Rate-limit / failure handling per source (what happens if Companies House or Tavily is down or empty) — calls route through the Phase 0.6 circuit breaker
 - 2.5 **[Stretch — if time permits after Phase 7]** Filing-pattern signals from Companies House: SIC code changes over time, officer turnover rate, accounts-filing punctuality, **plus PSC (persons-with-significant-control / beneficial ownership) data** — same API family, zero extra integration cost, and directly relevant to an underwriting context (who actually controls this company). Feeds into the Company Quality Signals section. Log as explicitly deferred in the design note if not completed; do not let this expand Phase 2's core scope.
 - 2.6 Unit tests with mocked API responses
@@ -48,7 +55,9 @@ Each phase must be explained and approved (per `workflows.md`) before Claude Cod
 - 3.5 **Adaptive re-search loop — the genuine agentic decision point, added to close a Round 1 council finding that was raised but never actioned in Rounds 1–3.** After initial extraction (Phase 4) runs against the first gather pass, evaluate per-section claim sufficiency using the same claim-count logic as Phase 5.4's confidence rule. If a section has fewer claims than the MEDIUM threshold (i.e. it would currently score LOW) **and** the Phase 3.2 tool-call budget isn't exhausted, the graph conditionally routes back to a targeted follow-up gather step with a refined query (e.g. narrower to that specific section's gap) rather than proceeding straight to synthesis. This is implemented as a LangGraph conditional edge keyed on runtime extraction state — this is what actually distinguishes an agent from a fixed pipeline: the control flow itself depends on what was found, not just on which step comes next in a predetermined order.
 
 ## Phase 4 — Structured Extraction
-- 4.1 Pydantic schemas: `EvidenceClaim` (text, source_url, source_type, confidence), per-section schemas
+- 4.1 Pydantic schemas: `EvidenceClaim` (text, source_url, source_type, confidence, **`counts_toward_confidence: bool = True`**), per-section schemas.
+
+  Set `counts_toward_confidence = False` when a claim is retrieved and worth surfacing in the report's prose (e.g. as a caveated evidence gap) but is not reliable enough to count toward that section's confidence score — e.g. a single secondary source with no independent corroboration, or a claim substituted from an aggregator because the primary source returned an access error. **The full claim list — including excluded claims — still renders in the report's prose and evidence-gap notes; only the Phase 5.4 scoring math excludes them.** Found by building the Phase 0.7 mock, whose Section 2 manually excluded a secondary estimate from its scored claims while still discussing it in prose — the right instinct, but one a human made by hand. The pipeline needs it as a schema field, not an implicit judgment call reinvented every run.
 - 4.2 Extraction prompts per source type (filings vs. news vs. reviews need different extraction framing)
 - 4.3 Deduplication / conflict detection across sources (two sources disagree — this must surface, not silently resolve)
 
@@ -62,24 +71,37 @@ Each phase must be explained and approved (per `workflows.md`) before Claude Cod
   - **MINOR conflict:** sources differ on phrasing or peripheral detail but agree on the core fact (e.g. two sources give slightly different employee-count estimates, or differing dates for the same event within a plausible range).
   - **MAJOR conflict:** sources contradict a core fact (e.g. one source states the company was acquired/dissolved while Companies House shows it independently trading; or sources give opposite reputation signals on the same specific claim, not just differing tone).
 
+  **Precedence is the rule.** Conditions are evaluated strictly top to bottom and the first match returns. The previous version listed HIGH before the MINOR-conflict clause, which let any section satisfying HIGH's count-and-authority test short-circuit before the downgrade was ever checked — making that clause dead code in exactly the case the Phase 0.7 mock hit (7 claims, an official source present, one real MINOR conflict). Order below is load-bearing, not presentational.
+
   ```
-  score_confidence(claims: list[EvidenceClaim]) -> ConfidenceBand
+  score_confidence(claims: list[EvidenceClaim]) -> ConfidenceBand:
 
-  # Precedence: check MAJOR conflict FIRST, before any other condition.
-  # A MAJOR conflict forces LOW regardless of claim count or source
-  # authority — it is not merely one of several equally-weighted LOW
-  # conditions, it overrides HIGH/MEDIUM outright.
-  if any MAJOR conflict present among claims:
-      return LOW
+      scored = [c for c in claims if c.counts_toward_confidence]  # Phase 4.1
 
-  HIGH   if len(claims) >= 3 AND
-            at least one claim from an `official` or `trade_press`
-            source (per Phase 2.3a taxonomy)
-  MEDIUM if (1 <= len(claims) <= 2)
-            OR (len(claims) >= 3 AND only MINOR conflicts present)
-  LOW    if len(claims) <= 1
-            OR all claims are tagged `general_web` or a single
-            `review` source only (per Phase 2.3a taxonomy)
+      if len(scored) == 0:
+          return LOW
+
+      if any MAJOR conflict among scored:
+          return LOW
+
+      if all scored claims tagged `general_web`, OR (len(scored) == 1 AND
+         that claim is `review`):
+          return LOW
+
+      if any MINOR conflict among scored:
+          return MEDIUM   # capped here regardless of count/authority — a
+                          # minor conflict is evidence the claim isn't
+                          # fully settled, and can't be outvoted by
+                          # having enough sources
+
+      if len(scored) >= 3 AND at least one scored claim is
+         `official_registry` or `trade_press` (an `official_self` claim
+         only counts toward this condition if the section also contains
+         at least one non-self claim — corroboration, not agreement, is
+         what's required):
+          return HIGH
+
+      return MEDIUM
   ```
   This runs per-section, not once per report — each of the 3 sections gets its own confidence band, since evidence density varies by section (Companies House data is usually strong for business model, often weak for quality signals).
 - 5.5 Render the confidence band visibly per section in the output (badge/label), matching the Phase 0.7 mock — not a disclaimer appended at the end
