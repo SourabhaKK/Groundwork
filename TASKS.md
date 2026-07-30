@@ -58,6 +58,13 @@ Each phase must be explained and approved (per `workflows.md`) before Claude Cod
 - 4.1 Pydantic schemas: `EvidenceClaim` (text, source_url, source_type, confidence, **`counts_toward_confidence: bool = True`**), per-section schemas.
 
   Set `counts_toward_confidence = False` when a claim is retrieved and worth surfacing in the report's prose (e.g. as a caveated evidence gap) but is not reliable enough to count toward that section's confidence score — e.g. a single secondary source with no independent corroboration, or a claim substituted from an aggregator because the primary source returned an access error. **The full claim list — including excluded claims — still renders in the report's prose and evidence-gap notes; only the Phase 5.4 scoring math excludes them.** Found by building the Phase 0.7 mock, whose Section 2 manually excluded a secondary estimate from its scored claims while still discussing it in prose — the right instinct, but one a human made by hand. The pipeline needs it as a schema field, not an implicit judgment call reinvented every run.
+
+  **Claim granularity rule:** one claim = one atomic, independently-citable fact. Concretely:
+  - **Don't bundle** multiple distinct facts from the same source under a single claim just because they share a citation — e.g. an FCA notice stating a fine amount AND a restriction breach AND a remediation status is three claims, not one, even though all three cite the same document.
+  - **Don't split** one fact into multiple claims by rephrasing it or citing the same sentence twice — that inflates claim count without adding evidence, and would let the confidence rule be gamed (deliberately or accidentally) by an extraction step that over-fragments.
+  - **Test:** if two people extracting from the same source would likely disagree by more than one claim on how many facts it contains, the rule isn't tight enough yet — tighten it with a concrete example from whatever source type is causing the disagreement.
+
+  Why this is a prerequisite, not a refinement: Phase 5.4 gates entirely on `len(scored) >= 3`, but until this rule exists nothing defines what "one claim" means. Two extraction runs — or two engineers — could chunk the same document differently and move a section's band with no actual change in evidence quality. Found while auditing the Phase 0.7 mock, whose Section 3 bundled several distinguishable facts from one FCA notice into a smaller claim count by hand. See the worked example in `docs/phase-4.1-claim-granularity-example.md`.
 - 4.2 Extraction prompts per source type (filings vs. news vs. reviews need different extraction framing)
 - 4.3 Deduplication / conflict detection across sources (two sources disagree — this must surface, not silently resolve)
 
@@ -70,6 +77,8 @@ Each phase must be explained and approved (per `workflows.md`) before Claude Cod
   **Conflict severity, defined first (this rule was previously undefined and is a prerequisite for the scoring logic below):**
   - **MINOR conflict:** sources differ on phrasing or peripheral detail but agree on the core fact (e.g. two sources give slightly different employee-count estimates, or differing dates for the same event within a plausible range).
   - **MAJOR conflict:** sources contradict a core fact (e.g. one source states the company was acquired/dissolved while Companies House shows it independently trading; or sources give opposite reputation signals on the same specific claim, not just differing tone).
+
+  **Claim count is only meaningful if extraction followed the Phase 4.1 claim-granularity rule** (one claim = one atomic, independently-citable fact). Every count-based condition below inherits that dependency: an extraction step that bundles or over-fragments moves bands without any change in underlying evidence.
 
   **Precedence is the rule.** Conditions are evaluated strictly top to bottom and the first match returns. The previous version listed HIGH before the MINOR-conflict clause, which let any section satisfying HIGH's count-and-authority test short-circuit before the downgrade was ever checked — making that clause dead code in exactly the case the Phase 0.7 mock hit (7 claims, an official source present, one real MINOR conflict). Order below is load-bearing, not presentational.
 
