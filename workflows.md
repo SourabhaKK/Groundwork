@@ -96,6 +96,24 @@ A full re-check against all three council rounds found three Round 1 findings th
 
 None of this reopens the council process — these are completions of findings already on record, not new findings. The plan is now fully closed against all three audit rounds.
 
+## Addendum — Phase 0 Build Log (deviations and decisions)
+
+Phase 0.1–0.6 and 0.8 are built. Nothing in `TECH_STACK.md` was substituted — every locked tool is the one in use. Four things are worth recording because they are either structural deviations from `TASKS.md` or numbers that changed after being challenged.
+
+1. **New directory `src/llm/`, not listed in Phase 0.3.** The provider router and circuit breaker are consumed by both `src/agent/` (extraction) and `src/report/` (synthesis), so putting them inside either would make one import the other's internals. Rejected: `src/agent/llm/` — defensible, but it implies the report layer reaches into the agent package for a shared utility. This is a directory addition, not a tool substitution.
+
+2. **Rate limiting is hand-rolled, not `slowapi`.** Roughly 60 lines in `src/api/rate_limit.py`. Rejected: `slowapi` — it does per-IP windows well but has no notion of a global budget, so that half would have been hand-written anyway, alongside a dependency whose semantics we don't control. The hand-rolled version takes an injected clock, which is why the hour-window tests assert exact boundaries without sleeping. `TECH_STACK.md` specifies "per-IP/global rate limiting" as an approach, not a library, so this is not a stack deviation.
+
+3. **Rate-limit numbers were recalibrated before any code was written.** The originally proposed global cap of 50/day allowed ~1,500 runs/month against a Tavily free tier that supports ~250–400. The cap was chosen for feeling generous rather than by working back from the binding resource. It is now **200 reports total** across the review window. The per-IP limit stays at 5/hour.
+
+4. **Phase 0.5 gained a search-quota health signal.** Exhausting Tavily's credits does not crash anything — every later report renders with no web evidence, LOW confidence throughout, and almost no citations. That degradation *mimics the product's own uncertainty feature*, so an evaluator could not distinguish it from a working system reporting honestly on a thin company. `src/data_sources/search_quota.py` records what the last real search actually did and `/health` reports it. It deliberately does not poll a credits endpoint — Tavily exposes none we can depend on, and inventing one would be worse than observing outcomes.
+
+**Circuit-breaker thresholds (Phase 0.6), as implemented:** 3 consecutive transient failures → open → 60s cooldown routing to Gemini → a single half-open probe back to Claude. The load-bearing detail is the classification: only 5xx, 429, timeouts, and connection errors count. A 4xx from our own malformed prompt does **not** trip the breaker, because otherwise a bug in our schema would look like an Anthropic outage and silently demote every later call to the fallback model — debugging the wrong system. `tests/test_router.py::test_non_transient_error_does_not_trip_breaker` is the test that pins this.
+
+**Disclosed reuse:** the breaker follows the same open/cooldown/half-open pattern as the SecureOps provider-fallback router. Pattern reused, code written fresh — recorded here rather than left to look like an unattributed lift, and to be restated in the design note.
+
+**Known limitation, not a bug:** the rate limiter's counters are in-process. They reset when Cloud Run replaces the container (the likely case), and would multiply if the service scaled past one instance (the unlikely case, bounded by pinning `--max-instances=2` at deploy). Both are disclosed in the README rather than presented as airtight.
+
 ## Non-Negotiables Carried Over From Earlier Instructions
 
 - Every claim in the final report must be traceable to a source — this must be a structural property of the data model (per `TASKS.md` Phase 4.1's `EvidenceClaim` schema), not something enforced only by prompting.

@@ -1,0 +1,101 @@
+"""FastAPI skeleton, gated from day one.
+
+/report is deliberately a stub that 501s: the point of building the API in
+Phase 0 is that every later phase is developed and tested against real auth and
+rate-limit constraints, rather than being exempted from them until Phase 6.
+"""
+
+from __future__ import annotations
+
+import logging
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+
+from fastapi import Depends, FastAPI
+from pydantic import BaseModel, Field
+
+from src.api.auth import require_token
+from src.api.rate_limit import RateLimiter, enforce_rate_limit, get_limiter
+from src.config import get_settings
+from src.data_sources.search_quota import tracker as search_quota
+from src.llm.router import get_router
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+logger = logging.getLogger(__name__)
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    # Fail fast and loudly if a required key is missing, rather than letting it
+    # surface mid-run as an empty report that looks like thin evidence.
+    get_settings()
+    logger.info("configuration validated; all required keys present")
+    yield
+
+
+app = FastAPI(
+    title="Groundwork — UK Company Underwriting Intelligence",
+    description="First-pass intelligence report on a UK company, with per-section confidence.",
+    version="0.1.0",
+    lifespan=lifespan,
+)
+
+
+class ReportRequest(BaseModel):
+    query: str = Field(
+        min_length=1,
+        max_length=200,
+        description="Company name or Companies House registration number.",
+    )
+
+
+class HealthResponse(BaseModel):
+    status: str
+    llm_breaker: dict[str, object]
+    rate_limit: dict[str, int]
+    search_quota: dict[str, object]
+
+
+@app.get("/health", response_model=HealthResponse)
+def health(limiter: RateLimiter = Depends(get_limiter)) -> HealthResponse:
+    """Unauthenticated and unmetered by design.
+
+    The Phase 6.4a keep-warm cron has to reach this without carrying the demo
+    secret in a public GitHub Actions workflow. It exposes operational state
+    only — never a credential, never anything about a specific company.
+    """
+    try:
+        breaker = get_router().breaker.snapshot()
+    except Exception:  # noqa: BLE001 - diagnostics endpoint: degrade, don't 500
+        logger.exception("LLM router unavailable")
+        breaker = {"state": "unavailable"}
+
+    quota = search_quota.snapshot()
+    return HealthResponse(
+        status="ok",
+        llm_breaker=breaker,
+        rate_limit=limiter.snapshot(),
+        search_quota={
+            "status": quota.status.value,
+            "searches_this_container": quota.searches_this_container,
+            "detail": quota.detail,
+        },
+    )
+
+
+@app.post(
+    "/report",
+    status_code=501,
+    dependencies=[Depends(require_token), Depends(enforce_rate_limit)],
+)
+def create_report(request: ReportRequest) -> dict[str, str]:
+    """Not implemented until Phase 6.1 — the gate around it is real from now on."""
+    return {
+        "detail": "Report generation lands in Phase 6.1.",
+        "query": request.query,
+    }
+
+
+@app.get("/", include_in_schema=False)
+def root() -> dict[str, str]:
+    return {"service": "groundwork", "docs": "/docs", "health": "/health"}
