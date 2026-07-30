@@ -126,6 +126,16 @@ Constructing and then closely reading the mock against real Monzo/Starling/FCA s
 
 None of this changed any of the mock's three confidence bands — verified, not assumed. That the bands survived is not proof the original spec was correct; it's a coincidence of the specific evidence available for this one company.
 
+## Phase 0 — End-of-Phase Recap (complete, 30 July 2026)
+
+**Built:** repo and dependency scaffolding on `uv`; a `pydantic-settings` config that fails fast at startup so a missing key can never be mistaken for thin evidence; the `src/{agent,data_sources,report,api}/` layout plus `src/llm/`; CI running ruff and pytest with no secrets in the job; a bearer-token gate on `/report` using constant-time comparison, with per-IP (5/hour) and global (200 total) rate limits; an LLM router and circuit breaker that all model calls pass through, distinguishing provider outages from our own 4xx; an unauthenticated `/health` reporting breaker state, remaining budget and search-quota status; the README skeleton; and the Phase 0.7 Monzo mock, signed off.
+
+**Deferred, with reasons (for the design note):** multi-instance-safe rate limiting — in-process counters reset on container replacement and would multiply if Cloud Run scaled out, bounded by pinning `--max-instances=2` and disclosed in the README rather than presented as airtight. Real search-credit polling — Tavily exposes no dependable endpoint, so `/health` reports what the last actual search did rather than a guessed balance.
+
+**Spec fixes this phase produced** (all found by building, not by a new audit round): the 5.4 precedence bug, the `official_registry`/`official_self` split, `counts_toward_confidence`, the claim-granularity rule, and the badge claim-count/source-count conflation. Recorded in the addendum above.
+
+**What Phase 1 inherits:** `LLMRouter` for every model call; `Settings` for the Companies House key; the gated `/report` stub to build the real endpoint behind; and CI that fails on an unmocked live API call.
+
 ## Non-Negotiables Carried Over From Earlier Instructions
 
 - Every claim in the final report must be traceable to a source — this must be a structural property of the data model (per `TASKS.md` Phase 4.1's `EvidenceClaim` schema), not something enforced only by prompting.
