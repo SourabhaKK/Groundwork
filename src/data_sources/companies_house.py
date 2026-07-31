@@ -71,6 +71,14 @@ FILING_HISTORY_LIMIT = 100
 # (SC = Scotland, NI = Northern Ireland, OC/SO = LLPs, and others).
 _COMPANY_NUMBER_RE = re.compile(r"^(?:\d{8}|[A-Z]{2}\d{6})$")
 
+# Legal-form suffixes carry no distinguishing information — "MONZO BANK LIMITED"
+# and "Monzo Bank Ltd" are the same company to a human typing either. Lives here
+# with the register's other name/number normalisation rather than in a consumer,
+# because two consumers now need it: `agent.resolve` strips it to compare names,
+# and `data_sources.web_gather` strips it to search the press, which writes
+# "Monzo" and never "MONZO BANK LIMITED".
+LEGAL_SUFFIXES = ("limited", "ltd", "plc", "llp", "lp", "cic", "cio")
+
 
 # --------------------------------------------------------------------------
 # Errors

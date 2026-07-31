@@ -36,13 +36,26 @@ class Settings(BaseSettings):
     breaker_failure_threshold: int = 3
     breaker_cooldown_seconds: float = 60.0
 
-    # --- Rate limiting (Phase 0.5) ---
+    # --- Rate limiting (Phase 0.5, budget revised in Phase 2.2) ---
     # Per-IP window is generous enough for an evaluator to run all four Phase 7.1
-    # scenarios back to back. The global budget is a total across the whole review
-    # window, sized against Tavily's 1,000-credit free tier (~250-400 runs), not
-    # against a per-day intuition.
+    # scenarios back to back.
+    #
+    # The global budget is a total across the whole review window, worked back
+    # from the binding resource — Tavily's 1,000-credit monthly free tier — and
+    # it must be assumed to be spent inside a single month: the review window is
+    # days long, and this counter is in-process, so a container replacement
+    # resets it and it cannot be relied on to spread load across a month
+    # boundary.
+    #
+    # Phase 0 set this to 200 assuming ~3 credits per report (three basic
+    # searches). Phase 2.2 costs a report at 5 credits — one basic search for
+    # business model, two advanced for competitive landscape and reputation,
+    # where deeper retrieval genuinely changes what comes back — plus up to 1
+    # more for Phase 3.5's re-search, so 6 in the worst case. Reserving 200
+    # credits for development and Phase 7.1 manual runs (which bypass this gate
+    # entirely) leaves 800 to serve from: 800 / 6 = 133.
     per_ip_reports_per_hour: int = 5
-    global_report_budget: int = 200
+    global_report_budget: int = 130
 
 
 @lru_cache

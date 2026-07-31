@@ -58,6 +58,7 @@ from src.data_sources.companies_house import (
     Officer,
     PersonWithSignificantControl,
 )
+from src.data_sources.failures import FailureKind, GatherFailure
 
 logger = logging.getLogger(__name__)
 
@@ -69,28 +70,6 @@ class RegistrySource(StrEnum):
     FILING_HISTORY = "filing_history"
     OFFICERS = "officers"
     PSC = "psc"
-
-
-class FailureKind(StrEnum):
-    """Why a source is missing — the distinction Phase 2.4 and Phase 5 both need.
-
-    `UNAVAILABLE` is the register's problem and may be worth retrying;
-    `NOT_FOUND` and `ERROR` are not, and a breaker that treated them as outages
-    would trip on our own bugs.
-    """
-
-    UNAVAILABLE = "unavailable"  # 5xx, 429, timeout, connection error
-    NOT_FOUND = "not_found"  # endpoint had no record where one was expected
-    ERROR = "error"  # anything else, including our own malformed request
-
-
-class GatherFailure(BaseModel):
-    """One source that could not be fetched, in a form the report can print."""
-
-    source: RegistrySource
-    kind: FailureKind
-    detail: str
-    retry_after: float | None = None  # the register's own number, for Phase 2.4
 
 
 class RegistryGather(BaseModel):
@@ -128,7 +107,7 @@ class RegistryGather(BaseModel):
         return not self.failures
 
     @property
-    def missing(self) -> list[RegistrySource]:
+    def missing(self) -> list[str]:
         return [failure.source for failure in self.failures]
 
     @property

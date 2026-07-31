@@ -11,6 +11,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from src.api.main import app
+from src.config import get_settings
 from tests.conftest import TEST_TOKEN
 
 
@@ -26,8 +27,13 @@ def test_health_needs_no_token(client: TestClient) -> None:
     body = response.json()
     assert body["status"] == "ok"
     assert "llm_breaker" in body
-    assert body["rate_limit"]["global_budget"] == 200
+    # Asserted against the configured value rather than a literal: this test's
+    # job is that /health reports the budget, not what the budget is. The number
+    # itself is pinned in test_web_gather, next to the credit arithmetic it is
+    # derived from — where a change to it will fail for the right reason.
+    assert body["rate_limit"]["global_budget"] == get_settings().global_report_budget
     assert body["search_quota"]["status"] == "unknown"
+    assert body["search_quota"]["credits_this_container"] == 0
 
 
 def test_health_exposes_no_secrets(client: TestClient) -> None:

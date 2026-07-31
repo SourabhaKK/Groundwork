@@ -30,6 +30,7 @@ class SearchQuotaStatus(StrEnum):
 class SearchQuotaSnapshot:
     status: SearchQuotaStatus
     searches_this_container: int
+    credits_this_container: int = 0
     detail: str | None = None
 
 
@@ -38,12 +39,22 @@ class SearchQuotaTracker:
         self._lock = threading.Lock()
         self._status = SearchQuotaStatus.UNKNOWN
         self._count = 0
+        self._credits = 0
         self._detail: str | None = None
 
-    def record_success(self) -> None:
+    def record_success(self, *, credits: int = 1) -> None:
+        """Record a search that worked, and what it cost.
+
+        Credits are counted, not just searches, because Tavily prices by depth
+        (basic 1, advanced 2) and the global report budget in `config.py` is
+        derived from a monthly credit ceiling. Counting searches alone would
+        under-report spend by the exact factor the budget was sized against —
+        which is how the first version of this budget was wrong.
+        """
         with self._lock:
             self._status = SearchQuotaStatus.OK
             self._count += 1
+            self._credits += credits
             self._detail = None
 
     def record_exhausted(self, detail: str) -> None:
@@ -61,6 +72,7 @@ class SearchQuotaTracker:
             return SearchQuotaSnapshot(
                 status=self._status,
                 searches_this_container=self._count,
+                credits_this_container=self._credits,
                 detail=self._detail,
             )
 
@@ -69,6 +81,7 @@ class SearchQuotaTracker:
         with self._lock:
             self._status = SearchQuotaStatus.UNKNOWN
             self._count = 0
+            self._credits = 0
             self._detail = None
 
 

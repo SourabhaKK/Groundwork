@@ -78,6 +78,7 @@ def health(limiter: RateLimiter = Depends(get_limiter)) -> HealthResponse:
         search_quota={
             "status": quota.status.value,
             "searches_this_container": quota.searches_this_container,
+            "credits_this_container": quota.credits_this_container,
             "detail": quota.detail,
         },
     )
