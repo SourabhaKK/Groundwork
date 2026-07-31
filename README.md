@@ -24,7 +24,15 @@ _TODO (Phase 6.5) — condensed decisions with their rejected alternatives, so a
 
 ## 5. What was deliberately deferred, and why
 
-_TODO (Phase 6.5) — directly answers the brief's "judgement on scope" criterion._
+_TODO (Phase 6.5) — directly answers the brief's "judgement on scope" criterion. Notes below are seeded as each phase produces them, so this section is written from a record rather than from memory._
+
+**Rebrands and trading names (Phase 1.3).** These are two different things, and the system handles one of them. Both statements below were tested against the live Companies House API, not reasoned about.
+
+**Former registered legal names — supported.** If a company changed its registered name, searching the old one finds it. Companies House indexes former names and flags them in the search response, and we confirm the match against the company's `previous_company_names` before surfacing it. Verified end to end: searching **"Focus FS"** returns **Monzo Bank Limited** (09446231, registered as FOCUS FS LIMITED from 2015-02-18 until 2016-10-21). The result is always presented for confirmation rather than resolved silently — a former name is evidence of identity, not proof of it.
+
+**Trading and brand names that were never registered — not supported, and not fixable here.** If a name was only ever a brand, the register holds no record of it, so no matching logic can reach it. The tested example is the one most people would expect to work: **"Mondo" was Monzo's original brand**, dropped after a trademark dispute — but it was never the company's registered name (that went FOCUS FS LIMITED → MONZO BANK LIMITED). Searching "Mondo" returns **zero results for Monzo Bank Limited at any rank**, confirmed by sweeping the complete result set, not just the first page. The same applies to any brand-only name; Facebook → Meta fails identically.
+
+The distinction matters because the two look the same to a user and have completely different causes. The first was an implementation question and is solved. The second is an absence of data at the source. We report "not found" honestly rather than guessing — an LLM asked to map a trading name to a legal entity was rejected as a fabrication surface at the one step where the register gives us ground truth, and a hand-maintained trading-name table was rejected as unbounded maintenance for arbitrary coverage.
 
 ## 6. Setup
 

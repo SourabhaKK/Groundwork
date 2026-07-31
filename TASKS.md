@@ -14,7 +14,7 @@ Each phase must be explained and approved (per `workflows.md`) before Claude Cod
 Phase-level tracker. Tick a phase only once every sub-phase under it is ticked **and** its end-of-phase recap has been done per `workflows.md` — a phase isn't complete just because its code is written.
 
 - [x] **Phase 0** — Project Setup & Core Infrastructure — *complete; 0.7 mock signed off 30 Jul 2026*
-- [ ] **Phase 1** — Company Resolution & Disambiguation
+- [x] **Phase 1** — Company Resolution & Disambiguation — *complete; validated against the live register 31 Jul 2026*
 - [ ] **Phase 2** — Data Gathering Layer
 - [ ] **Phase 3** — Agent Orchestration (LangGraph)
 - [ ] **Phase 4** — Structured Extraction
@@ -36,10 +36,10 @@ Phase-level tracker. Tick a phase only once every sub-phase under it is ticked *
 - [x] 0.8 `README.md` skeleton (filled in fully in Phase 6)
 
 ## Phase 1 — Company Resolution & Disambiguation
-- [ ] 1.1 Companies House API client: search-by-name, lookup-by-number
-- [ ] 1.2 Disambiguation logic: multiple-match handling (return candidates with distinguishing detail — status, SIC code, address — not just names)
-- [ ] 1.3 Failure handling: no exact match (including rebrands/trading names vs. registered legal names — a real-world case, not an edge case), dissolved company, malformed input
-- [ ] 1.4 Unit tests: exact match, ambiguous match, no match, invalid input
+- [x] 1.1 Companies House API client: search-by-name, lookup-by-number
+- [x] 1.2 Disambiguation logic: multiple-match handling (return candidates with distinguishing detail — status, SIC code, address — not just names). **Output shape revised during the build**: the "found one, but don't accept it silently" cases became a single `NEEDS_CONFIRMATION` kind carrying a *list* of reasons, rather than being folded into `AMBIGUOUS`. See `BUILD_LOG.md` Phase 1.
+- [x] 1.3 Failure handling: no exact match (including rebrands/trading names vs. registered legal names — a real-world case, not an edge case), dissolved company, malformed input
+- [x] 1.4 Unit tests: exact match, ambiguous match, no match, invalid input — plus direct `CompaniesHouseClient` tests (auth scheme, status classification, `Retry-After`, real-socket timeout enforcement)
 
 ## Phase 2 — Data Gathering Layer
 - [ ] 2.1 Companies House deep pull: filing history, officers, SIC codes, company status
@@ -53,7 +53,7 @@ Phase-level tracker. Tick a phase only once every sub-phase under it is ticked *
   - **`general_web`** — everything else, lowest weight.
 
   The `official_registry` / `official_self` split replaces a single `official` tier, which treated an independent regulator and a company's word about itself as equally authoritative. Found by building the Phase 0.7 mock, which had to cite both an FCA enforcement notice and Monzo's own annual report. Required before Phase 4.2's per-source-type extraction prompts and Phase 5.4's confidence rule, both of which assume this tiering exists.
-- [ ] 2.4 Rate-limit / failure handling per source (what happens if Companies House or Tavily is down or empty) — calls route through the Phase 0.6 circuit breaker
+- [ ] 2.4 Rate-limit / failure handling per source (what happens if Companies House or Tavily is down or empty) — each source gets its own circuit-breaker instance, following the same open/half-open/cooldown state machine as Phase 0.6's LLM router, but as a separate instantiation with no fallback target — neither Companies House nor Tavily has an alternate provider to switch to. The *pattern* is shared; the LLM router object itself is not reused for non-LLM sources. Clarified during Phase 1.1 — the original wording ("route through the Phase 0.6 circuit breaker") was ambiguous between literal object reuse and pattern reuse; it meant the latter.
 - [ ] 2.5 **[Stretch — if time permits after Phase 7]** Filing-pattern signals from Companies House: SIC code changes over time, officer turnover rate, accounts-filing punctuality, **plus PSC (persons-with-significant-control / beneficial ownership) data** — same API family, zero extra integration cost, and directly relevant to an underwriting context (who actually controls this company). Feeds into the Company Quality Signals section. Log as explicitly deferred in the design note if not completed; do not let this expand Phase 2's core scope.
 - [ ] 2.6 Unit tests with mocked API responses
 
