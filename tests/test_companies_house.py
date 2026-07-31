@@ -71,6 +71,31 @@ async def test_auth_is_basic_with_key_as_username_and_blank_password() -> None:
     assert base64.b64decode(encoded).decode() == "secret-key:"
 
 
+@pytest.mark.asyncio
+async def test_auth_survives_an_injected_transport() -> None:
+    """Regression guard (found in Phase 2.2, fixed in 2.4).
+
+    Auth used to be baked into the `httpx.AsyncClient` this class constructs, so
+    a caller that injected its own — which is how every gather and every test
+    builds one — sent no credentials at all. The register answers that with a
+    401 identical to the one a wrong key gets, which is precisely the ambiguity
+    that cost real debugging time in Phase 1 with test-vs-live keys.
+    """
+    seen: dict[str, str] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["authorization"] = request.headers.get("authorization", "")
+        return httpx.Response(200, json={"items": []})
+
+    injected = httpx.AsyncClient(base_url="https://ch.test", transport=httpx.MockTransport(handler))
+    async with CompaniesHouseClient(api_key="injected-key", client=injected) as client:
+        await client.search_companies("monzo")
+
+    scheme, _, encoded = seen["authorization"].partition(" ")
+    assert scheme == "Basic"
+    assert base64.b64decode(encoded).decode() == "injected-key:"
+
+
 # --------------------------------------------------------------------------
 # Status classification — the distinction the rest of the system depends on
 # --------------------------------------------------------------------------

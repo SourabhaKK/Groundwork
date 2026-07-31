@@ -54,6 +54,8 @@ from enum import StrEnum
 
 from pydantic import BaseModel, Field
 
+from src.circuit_breaker import CircuitOpenError
+from src.data_sources.breakers import TAVILY, get_breaker, guarded, is_tavily_transient
 from src.data_sources.companies_house import LEGAL_SUFFIXES, CompanyProfile
 from src.data_sources.failures import FailureKind, GatherFailure
 from src.data_sources.tavily import (
@@ -202,6 +204,10 @@ def _classify(section: WebSection, error: BaseException) -> GatherFailure:
     """
     if isinstance(error, TavilyQuotaExhausted):
         return GatherFailure(source=section.value, kind=FailureKind.EXHAUSTED, detail=str(error))
+    if isinstance(error, CircuitOpenError):
+        # Skipped without calling out. Reported as unavailable, with the reason
+        # in the detail — see the matching note in `registry_gather._classify`.
+        return GatherFailure(source=section.value, kind=FailureKind.UNAVAILABLE, detail=str(error))
     if isinstance(error, TavilyUnavailable):
         return GatherFailure(
             source=section.value,
@@ -231,9 +237,21 @@ async def gather_web(profile: CompanyProfile, client: TavilyClient) -> WebGather
     """
     queries = build_queries(profile)
     sections = list(queries)
+    breaker = get_breaker(TAVILY)
+
+    def under_breaker(section: WebSection):
+        return guarded(
+            breaker,
+            # Bound as a default argument, not captured: a bare closure over the
+            # loop variable would send all three searches whichever query the
+            # comprehension finished on.
+            lambda s=section: client.search(queries[s], depth=SECTION_DEPTH[s]),
+            is_transient=is_tavily_transient,
+            what=f"{section.value} search",
+        )
 
     results = await asyncio.gather(
-        *(client.search(queries[section], depth=SECTION_DEPTH[section]) for section in sections),
+        *(under_breaker(section) for section in sections),
         return_exceptions=True,
     )
 

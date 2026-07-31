@@ -12,6 +12,7 @@ import pytest
 
 from src.api import rate_limit
 from src.config import Settings, get_settings
+from src.data_sources.breakers import reset_breakers
 from src.data_sources.search_quota import tracker
 from src.llm import router as router_module
 
@@ -33,6 +34,7 @@ def _isolated_state(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     get_settings.cache_clear()
     rate_limit.reset_limiter()
     router_module.reset_router()
+    reset_breakers()
     tracker.reset()
 
     yield
@@ -40,6 +42,7 @@ def _isolated_state(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     get_settings.cache_clear()
     rate_limit.reset_limiter()
     router_module.reset_router()
+    reset_breakers()
     tracker.reset()
 
 

@@ -360,9 +360,15 @@ class CompaniesHouseClient:
     ) -> None:
         self._base_url = base_url.rstrip("/")
         self._owns_client = client is None
+        # Auth is held here and attached per request rather than baked into the
+        # transport. A caller that injects its own `httpx.AsyncClient` would
+        # otherwise send no credentials at all, and the register answers that
+        # with the same 401 a wrong key gets — the exact ambiguity that cost
+        # real debugging time in Phase 1, when a sandbox key against the live
+        # host proved indistinguishable from a revoked one.
+        self._auth = (api_key or get_settings().companies_house_api_key, "")
         self._client = client or httpx.AsyncClient(
             base_url=self._base_url,
-            auth=(api_key or get_settings().companies_house_api_key, ""),
             timeout=timeout,
             headers={"Accept": "application/json"},
         )
@@ -380,7 +386,7 @@ class CompaniesHouseClient:
 
     async def _get(self, path: str, params: dict[str, object] | None = None) -> dict:
         try:
-            response = await self._client.get(path, params=params)
+            response = await self._client.get(path, params=params, auth=self._auth)
         except httpx.TimeoutException as exc:
             raise CompaniesHouseUnavailable(f"Companies House timed out on {path}") from exc
         except httpx.TransportError as exc:

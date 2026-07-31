@@ -15,8 +15,8 @@ import logging
 from dataclasses import dataclass
 from enum import StrEnum
 
+from src.circuit_breaker import CircuitBreaker, CircuitOpenError
 from src.config import Settings, get_settings
-from src.llm.circuit_breaker import CircuitBreaker, CircuitOpenError
 from src.llm.providers import AnthropicProvider, GeminiProvider, LLMProvider
 
 logger = logging.getLogger(__name__)

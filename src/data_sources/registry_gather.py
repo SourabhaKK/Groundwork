@@ -47,6 +47,13 @@ from enum import StrEnum
 
 from pydantic import BaseModel, Field
 
+from src.circuit_breaker import CircuitOpenError
+from src.data_sources.breakers import (
+    COMPANIES_HOUSE,
+    get_breaker,
+    guarded,
+    is_companies_house_transient,
+)
 from src.data_sources.companies_house import (
     FILING_HISTORY_LIMIT,
     CompaniesHouseAuthError,
@@ -131,6 +138,12 @@ def _classify(source: RegistrySource, error: BaseException) -> GatherFailure:
             detail=str(error),
             retry_after=error.retry_after,
         )
+    if isinstance(error, CircuitOpenError):
+        # We didn't call out at all. Still `UNAVAILABLE`: from the report's side
+        # the source is missing for the same reason, and the detail carries the
+        # distinction for anyone reading the Phase 3.4 log. A separate kind
+        # would grow the taxonomy without giving any consumer a new decision.
+        return GatherFailure(source=source, kind=FailureKind.UNAVAILABLE, detail=str(error))
     if isinstance(error, CompanyNotFound):
         return GatherFailure(source=source, kind=FailureKind.NOT_FOUND, detail=str(error))
     return GatherFailure(
@@ -159,11 +172,21 @@ async def gather_companies_house(
     `CompaniesHouseAuthError`; every other failure comes back inside the bundle.
     """
     number = profile.number
+    breaker = get_breaker(COMPANIES_HOUSE)
 
+    def under_breaker(call, what: str):
+        return guarded(breaker, call, is_transient=is_companies_house_transient, what=what)
+
+    # All three are in flight before any of them can fail, so the breaker can't
+    # protect this run from a register that goes down mid-gather — it protects
+    # the *next* run. What it does do here is skip all three instantly when the
+    # register was already known to be down.
     results = await asyncio.gather(
-        client.get_filing_history(number, limit=filing_limit),
-        client.get_officers(number),
-        client.get_psc(number),
+        under_breaker(
+            lambda: client.get_filing_history(number, limit=filing_limit), "filing history"
+        ),
+        under_breaker(lambda: client.get_officers(number), "officers"),
+        under_breaker(lambda: client.get_psc(number), "psc"),
         return_exceptions=True,
     )
 
