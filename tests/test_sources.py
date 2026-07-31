@@ -26,8 +26,11 @@ from src.data_sources.sources import (
     build_evidence,
     classify_source,
     is_company_own_domain,
+    is_user_generated,
+    names_a_different_entity,
     registrable_label,
     registry_documents,
+    web_documents,
 )
 from src.data_sources.tavily import SearchDepth, SearchResult
 from src.data_sources.web_gather import SectionSearch, WebGather, WebSection
@@ -153,6 +156,175 @@ def test_a_generic_name_token_cannot_claim_a_domain() -> None:
 
 def test_an_unrelated_domain_is_not_the_companys_own() -> None:
     assert not is_company_own_domain("starlingbank.com", PROFILE)
+
+
+# --------------------------------------------------------------------------
+# Findings from the live Tavily trial (run before merging Phase 2)
+#
+# Every URL below is one the real API actually returned for MONZO BANK LIMITED.
+# They are regression guards against observed data, not invented cases.
+# --------------------------------------------------------------------------
+
+
+def test_a_company_forum_is_user_opinion_not_company_disclosure() -> None:
+    """The live trial tagged this `official_self`, giving a customer complaint
+    the tier meant for audited annual reports — and under 2.3a that can count
+    toward the HIGH-band gate once corroborated. The domain says who *hosts* the
+    page, not who *wrote* it."""
+    url = "https://community.monzo.com/t/an-honest-customers-review/124771"
+    assert classify_source(url, PROFILE) is SourceType.REVIEW
+
+
+def test_the_companys_actual_site_is_still_official_self() -> None:
+    """The control. Without it, the demotion above could be over-broad and
+    silently strip the company's real disclosures of their tier."""
+    url = "https://monzo.com/blog/how-banks-make-money"
+    assert classify_source(url, PROFILE) is SourceType.OFFICIAL_SELF
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://community.monzo.com/anything",
+        "https://forum.monzo.com/thread/1",
+        "https://monzo.com/community/threads/2",
+        "https://monzo.com/t/a-thread",
+    ],
+)
+def test_ugc_patterns_are_recognised(url: str) -> None:
+    assert is_user_generated(url)
+
+
+@pytest.mark.parametrize(
+    "url",
+    ["https://monzo.com/blog/x", "https://monzo.com/annual-report", "https://monzo.com/"],
+)
+def test_ordinary_company_pages_are_not_treated_as_forums(url: str) -> None:
+    assert not is_user_generated(url)
+
+
+def test_parliamentary_written_evidence_stays_general_web() -> None:
+    """Deliberate, not an oversight. This page is an authoritative *host*
+    publishing the company's *own* submission ("Monzo — Written evidence").
+    Adding parliament.uk to the registry tier would systematically dress
+    self-authored lobbying material as independent regulator-grade evidence."""
+    url = "https://committees.parliament.uk/writtenevidence/131720/html"
+    assert classify_source(url, PROFILE) is SourceType.GENERAL_WEB
+
+
+def test_allowlist_gaps_found_by_the_live_trial_are_closed() -> None:
+    trade = "https://ffnews.com/newsarticle/fintech/monzo-retains-top-spot-in-uk-banks"
+    review = "https://www.bbb.org/us/ca/san-francisco/profile/banking-services/monzo-inc/complaints"
+
+    assert classify_source(trade, PROFILE) is SourceType.TRADE_PRESS
+    assert classify_source(review, PROFILE) is SourceType.REVIEW
+
+
+def test_the_ombudsman_is_an_independent_registry_source() -> None:
+    """The best single source the live trial produced — an adjudicated
+    complaint. Worth pinning that it keeps the top tier."""
+    url = "https://www.financial-ombudsman.org.uk/decision/DRN-5119285.pdf"
+    assert classify_source(url, PROFILE) is SourceType.OFFICIAL_REGISTRY
+
+
+# --------------------------------------------------------------------------
+# The entity guard — the live trial's most serious finding
+# --------------------------------------------------------------------------
+
+
+def test_a_foreign_affiliate_is_flagged_by_its_legal_designator() -> None:
+    """The exact page the live trial returned: a BBB complaints record for
+    "Monzo, Inc." — a US entity — surfaced by a query about MONZO BANK LIMITED.
+    Nothing downstream would have caught it, because every snippet just says
+    "Monzo", and complaints against a foreign affiliate would have been
+    attributed to the UK bank being underwritten."""
+    title = "Monzo, Inc. | BBB Complaints | Better Business Bureau"
+
+    assert names_a_different_entity(title, PROFILE) == "Monzo, Inc."
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Monzo Inc filed with the SEC",
+        "a statement from Monzo LLC",
+        "Monzo Corp announced",
+        "Monzo GmbH expands into Berlin",
+    ],
+)
+def test_other_foreign_forms_are_caught_too(text: str) -> None:
+    assert names_a_different_entity(text, PROFILE) is not None
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "MONZO BANK LIMITED published its annual report",
+        "Monzo Bank Ltd is authorised by the PRA",
+        "Monzo launched a new savings product",
+        "",
+    ],
+)
+def test_the_uk_entity_is_never_flagged(text: str) -> None:
+    """A guard that fired on the subject itself would put a warning on every
+    document and be ignored within a day."""
+    assert names_a_different_entity(text, PROFILE) is None
+
+
+def test_a_foreign_competitor_is_not_our_problem() -> None:
+    """The narrowness is the design. Only the *subject's* brand followed by a
+    non-UK designator counts — flagging every foreign company mentioned
+    anywhere would make the signal worthless."""
+    text = "Monzo competes with Revolut Inc and Chime Inc in the challenger space"
+
+    assert names_a_different_entity(text, PROFILE) is None
+
+
+def test_a_generic_company_name_does_not_trigger_on_common_words() -> None:
+    """ "Bank Group Limited" must not flag every mention of "Bank Inc" in a
+    document — the same generic-token guard the self-domain heuristic uses."""
+    generic = CompanyProfile.model_validate(
+        {"company_number": "00000003", "company_name": "BANK GROUP LIMITED"}
+    )
+
+    assert names_a_different_entity("Deutsche Bank Inc reported", generic) is None
+
+
+def test_the_warning_travels_on_the_document() -> None:
+    """End to end: the flag has to reach Phase 4.2, which is required to reject
+    or flag claims from a document carrying it. A warning computed and dropped
+    would be worse than none, since it would look handled."""
+    web = WebGather(
+        company_name=PROFILE.name,
+        sections=[
+            SectionSearch(
+                section=WebSection.REPUTATION,
+                query="q",
+                depth=SearchDepth.ADVANCED,
+                results=[
+                    SearchResult(
+                        url="https://www.bbb.org/us/ca/san-francisco/profile/monzo-inc/complaints",
+                        title="Monzo, Inc. | BBB Complaints",
+                        content="Complaints about the company.",
+                    ),
+                    SearchResult(
+                        url="https://monzo.com/about/",
+                        title="About Monzo",
+                        content="MONZO BANK LIMITED is a UK bank.",
+                    ),
+                ],
+                credits_spent=2,
+            )
+        ],
+    )
+
+    documents = web_documents(web, PROFILE)
+
+    assert documents[0].entity_warning == "Monzo, Inc."
+    assert documents[1].entity_warning is None
+    # Flagged, not filtered: whether a foreign affiliate is irrelevant or highly
+    # relevant is a judgement for extraction, not for the fetching layer.
+    assert len(documents) == 2
 
 
 def test_self_wins_over_press_when_the_company_is_a_publisher() -> None:

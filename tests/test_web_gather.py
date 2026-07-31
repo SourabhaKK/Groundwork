@@ -117,6 +117,18 @@ def test_there_is_exactly_one_query_per_report_section() -> None:
     assert set(build_queries(PROFILE)) == set(WebSection)
 
 
+def test_every_query_is_anchored_to_the_uk() -> None:
+    """Added after the live trial: the reputation query returned a Better
+    Business Bureau complaints page for "Monzo, Inc.", a US entity, in a report
+    about a company on the UK register. A brand name alone does not say which
+    jurisdiction's legal entity is meant.
+
+    The anchor reduces the odds; it is not trusted to eliminate them. What gets
+    through is caught by `sources.names_a_different_entity`."""
+    for section, query in build_queries(PROFILE).items():
+        assert "UK" in query, f"{section.value} query lost its UK anchor: {query!r}"
+
+
 # --------------------------------------------------------------------------
 # The credit budget the report cap is derived from
 # --------------------------------------------------------------------------

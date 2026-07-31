@@ -133,18 +133,26 @@ def build_queries(profile: CompanyProfile) -> dict[WebSection, str]:
     use the trading name alone: coverage of competitors and reviews is written
     about brands, and pinning the legal name into those queries reliably returns
     filings and directory listings instead of the commentary being sought.
+
+    **Every query is anchored to the UK**, added after the live trial returned a
+    Better Business Bureau complaints page for "Monzo, Inc." — a US entity — in
+    response to the reputation query. The subject of every report is a company
+    on the UK register, and a brand name alone does not say which jurisdiction's
+    legal entity is meant. The anchor makes that less likely, and is not trusted
+    to make it impossible: `sources.names_a_different_entity` flags what still
+    gets through, and Phase 4.2's prompts have to act on the flag.
     """
     short = trading_name(profile.name)
     return {
         WebSection.BUSINESS_MODEL: (
-            f"What does {short} ({profile.name}) do — business model, products, "
-            "services, and how the company makes money"
+            f"What does {short} ({profile.name}) do in the UK — business model, "
+            "products, services, and how the company makes money"
         ),
         WebSection.COMPETITIVE_LANDSCAPE: (
             f"{short} UK competitors, market position and competitive landscape"
         ),
         WebSection.REPUTATION: (
-            f"{short} customer reviews, complaints, reputation and regulatory action"
+            f"{short} UK customer reviews, complaints, reputation and regulatory action"
         ),
     }
 

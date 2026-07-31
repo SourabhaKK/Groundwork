@@ -79,6 +79,10 @@ Phase-level tracker. Tick a phase only once every sub-phase under it is ticked *
 
   Why this is a prerequisite, not a refinement: Phase 5.4 gates entirely on `len(scored) >= 3`, but until this rule exists nothing defines what "one claim" means. Two extraction runs — or two engineers — could chunk the same document differently and move a section's band with no actual change in evidence quality. Found while auditing the Phase 0.7 mock, whose Section 3 bundled several distinguishable facts from one FCA notice into a smaller claim count by hand. See the worked example in `docs/phase-4.1-claim-granularity-example.md`.
 - [ ] 4.2 Extraction prompts per source type (filings vs. news vs. reviews need different extraction framing)
+
+  **Required: honour `TaggedDocument.entity_warning`.** A document carrying a warning appears to describe a differently-named legal entity — e.g. "Monzo, Inc." in a report about MONZO BANK LIMITED. Extraction must either refuse to create claims from it, or create them marked `counts_toward_confidence=False` with the entity mismatch stated in the claim text. It must **not** silently absorb them: a complaint against a foreign affiliate rendered as a fact about the UK company being underwritten is a correctness failure, not a nuance.
+
+  Found by the Phase 2 live Tavily trial, which returned a Better Business Bureau complaints page for the US entity in response to a reputation query about the UK one. Every snippet said only "Monzo". Phase 1 solved this class of problem for *resolution*; the flag is the evidence-side half, and 4.2 is the consumer that makes it mean anything — the warning is computed in `src/data_sources/sources.py` and pinned by `tests/test_sources.py::test_the_warning_travels_on_the_document`.
 - [ ] 4.3 Deduplication / conflict detection across sources (two sources disagree — this must surface, not silently resolve)
 
 ## Phase 5 — Report Synthesis & Uncertainty Handling

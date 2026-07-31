@@ -121,6 +121,7 @@ TRADE_PRESS_DOMAINS = frozenset(
         "sky.com",
         # Sector and trade
         "altfi.com",
+        "ffnews.com",  # Fintech Finance News — surfaced by the live trial, ranked well
         "fintechfutures.com",
         "finextra.com",
         "thebanker.com",
@@ -140,6 +141,7 @@ TRADE_PRESS_DOMAINS = frozenset(
 
 REVIEW_DOMAINS = frozenset(
     {
+        "bbb.org",  # added after the live trial returned a BBB complaints page
         "trustpilot.com",
         "feefo.com",
         "reviews.io",
@@ -164,6 +166,29 @@ REVIEW_DOMAINS = frozenset(
 # new dependency, and TECH_STACK.md is locked, so a dependency would have to be
 # logged as a deviation to buy nothing.
 _COMPOUND_SUFFIXES = (".co.uk", ".org.uk", ".ac.uk", ".gov.uk", ".ltd.uk", ".plc.uk", ".me.uk")
+
+# User-generated content living on a company's own domain. Found by the live
+# trial: `community.monzo.com/t/an-honest-customers-review/...` was tagged
+# `official_self`, giving a customer's complaint the tier meant for audited
+# annual reports — and under 2.3a an `official_self` claim can count toward the
+# HIGH-band gate once corroborated.
+#
+# The heuristic's stated defence was that it could only ever *withhold*
+# authority, never invent it. This is the case that breaks that argument: the
+# domain says who *hosts* the page, not who *wrote* it. Demoted to `review`
+# rather than `general_web` because that is honestly what it is — user opinion
+# about the company — and the review tier already carries the right weight.
+_UGC_HOST_PREFIXES = ("community.", "forum.", "forums.", "discuss.", "answers.")
+_UGC_PATH_MARKERS = ("/community", "/forum", "/forums", "/discussions", "/t/")
+
+# The same conflation runs in the other direction, and we are deliberately
+# *not* fixing it: `committees.parliament.uk/writtenevidence/...` is an
+# authoritative host publishing a company's own submission ("Monzo — Written
+# evidence"). Adding `parliament.uk` to REGISTRY_DOMAINS would systematically
+# tag self-authored lobbying material as independent regulator-grade evidence,
+# so it stays `general_web` — understating it, which is the safe direction.
+# Recorded here because this is where someone would come to "fix" it.
+
 
 # Name tokens too generic to identify a company by. Without this, a company
 # called "The Bank Group" would claim bank.com as its own site.
@@ -247,6 +272,18 @@ def is_company_own_domain(host: str, profile: CompanyProfile) -> bool:
     return label == first and first not in _GENERIC_NAME_TOKENS and len(first) >= 4
 
 
+def is_user_generated(url: str) -> bool:
+    """Does this URL look like a forum or community thread rather than a
+    publication? Used only to demote a company's own domain — see the note on
+    `_UGC_HOST_PREFIXES`."""
+    parsed = urlparse(url)
+    host = (parsed.hostname or "").lower()
+    path = (parsed.path or "").lower()
+    if any(host.startswith(prefix) for prefix in _UGC_HOST_PREFIXES):
+        return True
+    return any(marker in path for marker in _UGC_PATH_MARKERS)
+
+
 def classify_source(url: str, profile: CompanyProfile | None = None) -> SourceType:
     """Which authority tier this URL belongs to. Never raises; defaults low.
 
@@ -268,12 +305,79 @@ def classify_source(url: str, profile: CompanyProfile | None = None) -> SourceTy
     if _in(host, REGISTRY_DOMAINS):
         return SourceType.OFFICIAL_REGISTRY
     if profile is not None and is_company_own_domain(host, profile):
-        return SourceType.OFFICIAL_SELF
+        # A company's forum is hosted by the company but written by its
+        # customers. Tagging that as the company's own disclosure overstates it
+        # in the one direction this heuristic was argued to be safe from.
+        return SourceType.REVIEW if is_user_generated(url) else SourceType.OFFICIAL_SELF
     if _in(host, REVIEW_DOMAINS):
         return SourceType.REVIEW
     if _in(host, TRADE_PRESS_DOMAINS):
         return SourceType.TRADE_PRESS
     return SourceType.GENERAL_WEB
+
+
+# Legal-form designators that are not UK ones. A document naming the subject's
+# brand followed by one of these is describing a *different legal entity* —
+# typically a foreign affiliate — no matter how similar the name looks.
+#
+# Found by the live trial: a query about MONZO BANK LIMITED returned a Better
+# Business Bureau complaints page for **Monzo, Inc.**, a US entity. Nothing
+# downstream would have caught it, because every snippet just says "Monzo", and
+# complaints against a foreign affiliate would have been attributed to the UK
+# bank being underwritten. Phase 1 solved this class of problem for *resolution*
+# and it was never solved for *evidence*.
+_FOREIGN_DESIGNATORS = (
+    "inc",
+    "llc",
+    "corp",
+    "corporation",
+    "gmbh",
+    "pty",
+    "pte",
+    "sarl",
+    "s a r l",
+    "bv",
+    "nv",
+)
+
+
+def names_a_different_entity(text: str, profile: CompanyProfile) -> str | None:
+    """The foreign-entity name this text uses for our company, if any.
+
+    Deliberately narrow: it only fires when the subject's *own* brand is
+    followed by a non-UK legal designator. "Monzo competes with Revolut Inc"
+    must not flag — that is a competitor being described correctly, and a guard
+    that cried wolf on every foreign company mentioned anywhere would be turned
+    off within a day.
+
+    Returns the offending phrase rather than a bool so the warning can quote
+    what it saw. A human reading "Monzo, Inc." next to "MONZO BANK LIMITED"
+    needs no further explanation.
+    """
+    if not text:
+        return None
+
+    tokens = [t for t in re.split(r"\W+", trading_name(profile.name).lower()) if t]
+    if not tokens:
+        return None
+
+    first = tokens[0]
+    candidates = {" ".join(tokens)}
+    if first not in _GENERIC_NAME_TOKENS and len(first) >= 4:
+        candidates.add(first)
+
+    for candidate in candidates:
+        pattern = (
+            r"\b"
+            + r"\s+".join(re.escape(part) for part in candidate.split())
+            + r"[\s,\.]+("
+            + "|".join(_FOREIGN_DESIGNATORS)
+            + r")\b\.?"
+        )
+        match = re.search(pattern, text, flags=re.IGNORECASE)
+        if match:
+            return match.group(0).strip()
+    return None
 
 
 class TaggedDocument(BaseModel):
@@ -291,6 +395,15 @@ class TaggedDocument(BaseModel):
     title: str | None = None
     section: WebSection | None = None  # None for register documents, which serve all three
     origin: str = ""  # which endpoint or search produced this, for the 3.4 audit log
+
+    # Set when this document appears to describe a differently-named legal
+    # entity — e.g. "Monzo, Inc." in a report about MONZO BANK LIMITED. Carried
+    # on the document rather than filtered out here on purpose: whether a claim
+    # about a foreign affiliate is irrelevant or highly relevant is a judgement
+    # for extraction and synthesis, not for the layer that fetched the page.
+    # Phase 4.2's prompts are required to reject or flag claims from a document
+    # carrying this; see TASKS.md 4.2.
+    entity_warning: str | None = None
 
 
 class EvidenceBundle(BaseModel):
@@ -471,6 +584,18 @@ def web_documents(gather: WebGather, profile: CompanyProfile) -> list[TaggedDocu
     documents: list[TaggedDocument] = []
     for search in gather.sections:
         for result in search.results:
+            # Title and snippet are checked together: the entity name often
+            # appears only in the title ("Monzo, Inc. | BBB Complaints") while
+            # the snippet says nothing but "Monzo".
+            warning = names_a_different_entity(f"{result.title or ''}\n{result.content}", profile)
+            if warning:
+                logger.warning(
+                    "evidence %s: %s appears to describe %r, not %s",
+                    profile.number,
+                    result.url,
+                    warning,
+                    profile.name,
+                )
             documents.append(
                 TaggedDocument(
                     url=result.url,
@@ -480,6 +605,7 @@ def web_documents(gather: WebGather, profile: CompanyProfile) -> list[TaggedDocu
                     content=result.content,
                     section=search.section,
                     origin=f"tavily:{search.section.value}",
+                    entity_warning=warning,
                 )
             )
     return documents
