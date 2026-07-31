@@ -63,7 +63,22 @@ class SearchQuotaTracker:
             self._detail = detail
 
     def record_error(self, detail: str) -> None:
+        """Record a non-quota failure, without masking a known exhaustion.
+
+        Found by writing this module's first direct tests in Phase 2.6. The
+        original rule was "last observation wins", which reads as sensible until
+        the searches run concurrently: a report fires three at once, and if one
+        comes back 429 (out of credits) and another 503, whichever resolved last
+        decided what /health said. "Last" is not a meaningful ordering between
+        simultaneous calls, so the tie is now broken by specificity instead —
+        `exhausted` is the actionable diagnosis and `error` must not overwrite
+        it. A genuine success still clears it, since that is real evidence the
+        quota is available again.
+        """
         with self._lock:
+            if self._status is SearchQuotaStatus.EXHAUSTED:
+                self._detail = f"{self._detail} (also: {detail})" if self._detail else detail
+                return
             self._status = SearchQuotaStatus.ERROR
             self._detail = detail
 
