@@ -76,7 +76,7 @@ The hosted demo runs on a personal API key and a metered search tier, so `/repor
 | Limit | Value | Reason |
 |---|---|---|
 | Per client | 5 reports/hour | Comfortably more than testing all four Phase 7.1 scenarios back to back |
-| Global | 200 reports total | Sized against the search provider's 1,000-credit free tier (~250–400 runs), not a per-day guess |
+| Global | 130 reports total | Worked back from the search provider's 1,000-credit monthly free tier at the real per-report cost — 5 credits (one basic search plus two deeper ones), 6 with a follow-up search — reserving 200 credits for development and manual end-to-end runs |
 
 Exceeding either returns `429` with an explanatory message rather than a bare failure.
 
