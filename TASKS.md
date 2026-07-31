@@ -15,7 +15,7 @@ Phase-level tracker. Tick a phase only once every sub-phase under it is ticked *
 
 - [x] **Phase 0** — Project Setup & Core Infrastructure — *complete; 0.7 mock signed off 30 Jul 2026*
 - [x] **Phase 1** — Company Resolution & Disambiguation — *complete; validated against the live register 31 Jul 2026*
-- [ ] **Phase 2** — Data Gathering Layer
+- [x] **Phase 2** — Data Gathering Layer — *core complete 31 Jul 2026; 2.5 deferred by design*
 - [ ] **Phase 3** — Agent Orchestration (LangGraph)
 - [ ] **Phase 4** — Structured Extraction
 - [ ] **Phase 5** — Report Synthesis & Uncertainty Handling
@@ -42,10 +42,10 @@ Phase-level tracker. Tick a phase only once every sub-phase under it is ticked *
 - [x] 1.4 Unit tests: exact match, ambiguous match, no match, invalid input — plus direct `CompaniesHouseClient` tests (auth scheme, status classification, `Retry-After`, real-socket timeout enforcement)
 
 ## Phase 2 — Data Gathering Layer
-- [ ] 2.1 Companies House deep pull: filing history, officers, SIC codes, company status
-- [ ] 2.2 Web/news/trade-press research via Tavily: business model signals, competitor mentions, review/reputation signals
-- [ ] 2.3 Source-tagging: every fetched document/snippet stored with its URL, source type, and retrieval timestamp
-- [ ] 2.3a **Source authority taxonomy** — a short allowlist/tagging function, not a research project. Five tiers, highest authority first:
+- [x] 2.1 Companies House deep pull: filing history, officers, SIC codes, company status
+- [x] 2.2 Web/news/trade-press research via Tavily: business model signals, competitor mentions, review/reputation signals
+- [x] 2.3 Source-tagging: every fetched document/snippet stored with its URL, source type, and retrieval timestamp
+- [x] 2.3a **Source authority taxonomy** — a short allowlist/tagging function, not a research project. Five tiers, highest authority first:
   - **`official_registry`** — Companies House, FCA, PRA, and other independent regulators. No stake in what they report.
   - **`official_self`** — the subject company's own regulated disclosures (e.g. an annual report). Primary and audited, but self-interested. Counts toward Phase 5.4's HIGH-band authority gate **only when corroborated by a non-self claim in the same section**.
   - **`trade_press`** — maintained allowlist of recognized UK business/trade outlets.
@@ -53,9 +53,9 @@ Phase-level tracker. Tick a phase only once every sub-phase under it is ticked *
   - **`general_web`** — everything else, lowest weight.
 
   The `official_registry` / `official_self` split replaces a single `official` tier, which treated an independent regulator and a company's word about itself as equally authoritative. Found by building the Phase 0.7 mock, which had to cite both an FCA enforcement notice and Monzo's own annual report. Required before Phase 4.2's per-source-type extraction prompts and Phase 5.4's confidence rule, both of which assume this tiering exists.
-- [ ] 2.4 Rate-limit / failure handling per source (what happens if Companies House or Tavily is down or empty) — each source gets its own circuit-breaker instance, following the same open/half-open/cooldown state machine as Phase 0.6's LLM router, but as a separate instantiation with no fallback target — neither Companies House nor Tavily has an alternate provider to switch to. The *pattern* is shared; the LLM router object itself is not reused for non-LLM sources. Clarified during Phase 1.1 — the original wording ("route through the Phase 0.6 circuit breaker") was ambiguous between literal object reuse and pattern reuse; it meant the latter.
+- [x] 2.4 Rate-limit / failure handling per source (what happens if Companies House or Tavily is down or empty) — each source gets its own circuit-breaker instance, following the same open/half-open/cooldown state machine as Phase 0.6's LLM router, but as a separate instantiation with no fallback target — neither Companies House nor Tavily has an alternate provider to switch to. The *pattern* is shared; the LLM router object itself is not reused for non-LLM sources. Clarified during Phase 1.1 — the original wording ("route through the Phase 0.6 circuit breaker") was ambiguous between literal object reuse and pattern reuse; it meant the latter.
 - [ ] 2.5 **[Stretch — if time permits after Phase 7]** Filing-pattern signals from Companies House: SIC code changes over time, officer turnover rate, accounts-filing punctuality, **plus PSC (persons-with-significant-control / beneficial ownership) data** — same API family, zero extra integration cost, and directly relevant to an underwriting context (who actually controls this company). Feeds into the Company Quality Signals section. Log as explicitly deferred in the design note if not completed; do not let this expand Phase 2's core scope.
-- [ ] 2.6 Unit tests with mocked API responses
+- [x] 2.6 Unit tests with mocked API responses — plus the Phase 0 carry-forward debt (`providers.py`, `SearchQuotaTracker`, `lifespan`), now closed
 
 ## Phase 3 — Agent Orchestration (LangGraph)
 
@@ -79,6 +79,10 @@ Phase-level tracker. Tick a phase only once every sub-phase under it is ticked *
 
   Why this is a prerequisite, not a refinement: Phase 5.4 gates entirely on `len(scored) >= 3`, but until this rule exists nothing defines what "one claim" means. Two extraction runs — or two engineers — could chunk the same document differently and move a section's band with no actual change in evidence quality. Found while auditing the Phase 0.7 mock, whose Section 3 bundled several distinguishable facts from one FCA notice into a smaller claim count by hand. See the worked example in `docs/phase-4.1-claim-granularity-example.md`.
 - [ ] 4.2 Extraction prompts per source type (filings vs. news vs. reviews need different extraction framing)
+
+  **Required: honour `TaggedDocument.entity_warning`.** A document carrying a warning appears to describe a differently-named legal entity — e.g. "Monzo, Inc." in a report about MONZO BANK LIMITED. Extraction must either refuse to create claims from it, or create them marked `counts_toward_confidence=False` with the entity mismatch stated in the claim text. It must **not** silently absorb them: a complaint against a foreign affiliate rendered as a fact about the UK company being underwritten is a correctness failure, not a nuance.
+
+  Found by the Phase 2 live Tavily trial, which returned a Better Business Bureau complaints page for the US entity in response to a reputation query about the UK one. Every snippet said only "Monzo". Phase 1 solved this class of problem for *resolution*; the flag is the evidence-side half, and 4.2 is the consumer that makes it mean anything — the warning is computed in `src/data_sources/sources.py` and pinned by `tests/test_sources.py::test_the_warning_travels_on_the_document`.
 - [ ] 4.3 Deduplication / conflict detection across sources (two sources disagree — this must surface, not silently resolve)
 
 ## Phase 5 — Report Synthesis & Uncertainty Handling

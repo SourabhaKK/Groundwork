@@ -17,6 +17,7 @@ from pydantic import BaseModel, Field
 from src.api.auth import require_token
 from src.api.rate_limit import RateLimiter, enforce_rate_limit, get_limiter
 from src.config import get_settings
+from src.data_sources.breakers import breaker_snapshots
 from src.data_sources.search_quota import tracker as search_quota
 from src.llm.router import get_router
 
@@ -52,6 +53,7 @@ class ReportRequest(BaseModel):
 class HealthResponse(BaseModel):
     status: str
     llm_breaker: dict[str, object]
+    source_breakers: list[dict[str, object]]
     rate_limit: dict[str, int]
     search_quota: dict[str, object]
 
@@ -74,10 +76,15 @@ def health(limiter: RateLimiter = Depends(get_limiter)) -> HealthResponse:
     return HealthResponse(
         status="ok",
         llm_breaker=breaker,
+        # An empty list means no source has been called yet this container
+        # lifetime — which is not the same as every source being healthy, and
+        # must not be read that way.
+        source_breakers=breaker_snapshots(),
         rate_limit=limiter.snapshot(),
         search_quota={
             "status": quota.status.value,
             "searches_this_container": quota.searches_this_container,
+            "credits_this_container": quota.credits_this_container,
             "detail": quota.detail,
         },
     )

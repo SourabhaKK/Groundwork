@@ -1,10 +1,18 @@
-"""A stateful circuit breaker for LLM providers.
+"""A stateful circuit breaker, shared by every external provider.
 
 The state is the whole point. A stateless try/except fallback re-attempts a
 provider that is known to be down on *every* call, so a real outage adds the
 full timeout to every request — on a pipeline with ~10+ LLM calls per report,
 that is minutes of dead wait. Remembering that the provider is down is what
 turns "handle the error" into "stop paying for the error".
+
+Lives at `src/` root rather than inside `src/llm/`, where it started. Phase 2.4
+gives Companies House and Tavily their own instances of this same state
+machine, and a data-source module reaching into the LLM package for a generic
+mechanism would misrepresent what this is. Note what is shared and what is not:
+each consumer instantiates its own breaker with its own state, and the LLM
+router's breaker — which has a fallback provider to route to — is never reused
+for sources that have no alternate provider to switch to.
 """
 
 from __future__ import annotations

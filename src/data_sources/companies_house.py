@@ -1,7 +1,11 @@
 """Companies House client — the register is the spine of every report.
 
-Two operations only: search by name, look up by number. Everything else the
-register offers (filing history, officers, PSC) is Phase 2's deep pull.
+Phase 1 needed two operations: search by name, look up by number. Phase 2.1
+added the deep pull — filing history, officers, and persons with significant
+control — as three more read-only endpoints on the same client, because they
+share the auth scheme, the timeout policy and, most importantly, the status
+classification below. A second client would mean a second place for that
+classification to be got wrong.
 
 Two design points worth stating, because both are load-bearing later:
 
@@ -31,6 +35,7 @@ from __future__ import annotations
 import logging
 import re
 from datetime import date
+from typing import TypeVar
 
 import httpx
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
@@ -41,6 +46,11 @@ logger = logging.getLogger(__name__)
 
 BASE_URL = "https://api.company-information.service.gov.uk"
 
+# The three list endpoints differ only in which model their rows parse into, so
+# the fetch-and-parse helper is written once and typed over that. Declared as a
+# TypeVar rather than PEP 695 syntax because CI runs Python 3.11.
+ItemT = TypeVar("ItemT", bound=BaseModel)
+
 # Connect fast, read patiently: the register is usually quick, but a slow
 # response is still a usable one, whereas a slow *connect* means it's down.
 DEFAULT_TIMEOUT = httpx.Timeout(10.0, connect=5.0)
@@ -48,9 +58,26 @@ DEFAULT_TIMEOUT = httpx.Timeout(10.0, connect=5.0)
 # Companies House caps a search page at 100.
 MAX_ITEMS_PER_PAGE = 100
 
+# How much filing history one pull takes. Deliberately a single page rather
+# than a pagination loop: 100 filings reaches back roughly a decade for a
+# normally-active company, the signals Phase 2.5 wants (filing punctuality, SIC
+# changes, officer churn) all live in the recent end of that history, and each
+# extra page is another rate-limited request against a register we also need for
+# resolution. When the register says there were more, `total_count` records it,
+# so a truncated history is visible rather than silently complete-looking.
+FILING_HISTORY_LIMIT = 100
+
 # 8 characters: either 8 digits, or a 2-letter jurisdiction prefix + 6 digits
 # (SC = Scotland, NI = Northern Ireland, OC/SO = LLPs, and others).
 _COMPANY_NUMBER_RE = re.compile(r"^(?:\d{8}|[A-Z]{2}\d{6})$")
+
+# Legal-form suffixes carry no distinguishing information — "MONZO BANK LIMITED"
+# and "Monzo Bank Ltd" are the same company to a human typing either. Lives here
+# with the register's other name/number normalisation rather than in a consumer,
+# because two consumers now need it: `agent.resolve` strips it to compare names,
+# and `data_sources.web_gather` strips it to search the press, which writes
+# "Monzo" and never "MONZO BANK LIMITED".
+LEGAL_SUFFIXES = ("limited", "ltd", "plc", "llp", "lp", "cic", "cio")
 
 
 # --------------------------------------------------------------------------
@@ -183,6 +210,83 @@ class CompanyProfile(BaseModel):
         return self.status == "active"
 
 
+class FilingRecord(BaseModel):
+    """One entry in the filing history.
+
+    `filed_on` rather than `date`: the register's field is literally named
+    `date`, which would shadow `datetime.date` inside this module and make the
+    annotation on every other model in it mean something different.
+
+    Both `category` (the register's own taxonomy — `accounts`, `confirmation-
+    statement`, `officers`, `mortgage`) and the free-text `description` are
+    kept. The category is what Phase 2.5's punctuality and churn signals can be
+    computed from mechanically; the description is what an extraction prompt can
+    actually read. Dropping either would mean re-fetching to get it back.
+    """
+
+    model_config = ConfigDict(extra="ignore", populate_by_name=True)
+
+    filed_on: date | None = Field(default=None, alias="date")
+    category: str | None = None
+    filing_type: str | None = Field(default=None, alias="type")
+    description: str | None = None
+    action_date: date | None = None
+    paper_filed: bool = False
+
+
+class Officer(BaseModel):
+    """One appointment, current or resigned.
+
+    Resigned officers are kept, not filtered out: turnover is itself the signal
+    Phase 2.5 is after, and a list of only current officers cannot show it.
+    `resigned_on` is what distinguishes them, so the filter stays available to
+    the consumer rather than being applied here.
+
+    `date_of_birth` is deliberately not parsed. The register exposes only month
+    and year, it has no bearing on any of the three report sections, and there
+    is no reason for personal data to enter this pipeline — an underwriting
+    report about a company does not need an officer's age to be defensible.
+    """
+
+    model_config = ConfigDict(extra="ignore", populate_by_name=True)
+
+    name: str
+    role: str | None = Field(default=None, alias="officer_role")
+    appointed_on: date | None = None
+    resigned_on: date | None = None
+    nationality: str | None = None
+    occupation: str | None = None
+    country_of_residence: str | None = None
+
+    @property
+    def is_active(self) -> bool:
+        return self.resigned_on is None
+
+
+class PersonWithSignificantControl(BaseModel):
+    """A beneficial owner: who actually controls this company.
+
+    `name` is optional because it genuinely can be absent. The register omits it
+    for a "super-secure" PSC — someone whose details are protected because
+    disclosure would put them at risk — and for statement-type entries such as
+    "the company knows of no person with significant control". Both are
+    meaningful findings for an underwriter, so they are parsed and surfaced with
+    their `kind` rather than dropped as malformed rows.
+    """
+
+    model_config = ConfigDict(extra="ignore", populate_by_name=True)
+
+    name: str | None = None
+    kind: str | None = None
+    natures_of_control: list[str] = Field(default_factory=list)
+    notified_on: date | None = None
+    ceased_on: date | None = None
+
+    @property
+    def is_active(self) -> bool:
+        return self.ceased_on is None
+
+
 # Statuses that mean the company is no longer trading in its own right. Kept as
 # a set of strings rather than an enum on purpose: Companies House can add a
 # status at any time, and an unknown value must degrade to "not recognised as
@@ -256,9 +360,15 @@ class CompaniesHouseClient:
     ) -> None:
         self._base_url = base_url.rstrip("/")
         self._owns_client = client is None
+        # Auth is held here and attached per request rather than baked into the
+        # transport. A caller that injects its own `httpx.AsyncClient` would
+        # otherwise send no credentials at all, and the register answers that
+        # with the same 401 a wrong key gets — the exact ambiguity that cost
+        # real debugging time in Phase 1, when a sandbox key against the live
+        # host proved indistinguishable from a revoked one.
+        self._auth = (api_key or get_settings().companies_house_api_key, "")
         self._client = client or httpx.AsyncClient(
             base_url=self._base_url,
-            auth=(api_key or get_settings().companies_house_api_key, ""),
             timeout=timeout,
             headers={"Accept": "application/json"},
         )
@@ -276,7 +386,7 @@ class CompaniesHouseClient:
 
     async def _get(self, path: str, params: dict[str, object] | None = None) -> dict:
         try:
-            response = await self._client.get(path, params=params)
+            response = await self._client.get(path, params=params, auth=self._auth)
         except httpx.TimeoutException as exc:
             raise CompaniesHouseUnavailable(f"Companies House timed out on {path}") from exc
         except httpx.TransportError as exc:
@@ -342,6 +452,84 @@ class CompaniesHouseClient:
                 # result at all. Logged so it can't degrade silently.
                 logger.warning("skipping unparseable search result: %r", item)
         return results
+
+    async def _get_items(
+        self,
+        path: str,
+        model: type[ItemT],
+        *,
+        limit: int,
+        what: str,
+    ) -> tuple[list[ItemT], int | None]:
+        """Fetch one page of a list endpoint, parsed, with the register's total.
+
+        The total is returned alongside the items rather than being discarded,
+        because it is the only way to tell a company with 40 filings from a
+        company with 400 whose history we truncated at 100. Without it, a capped
+        pull looks identical to a complete one, and Phase 5 would report on a
+        partial history as though it were the whole record.
+
+        Unparseable rows are skipped and logged, matching `search_companies`:
+        one odd row degrading a list is better than it denying the caller every
+        other row in that list.
+        """
+        payload = await self._get(
+            path, params={"items_per_page": max(1, min(limit, MAX_ITEMS_PER_PAGE))}
+        )
+
+        items: list[ItemT] = []
+        for item in payload.get("items") or []:
+            try:
+                items.append(model.model_validate(item))
+            except ValidationError:
+                logger.warning("skipping unparseable %s row on %s: %r", what, path, item)
+
+        total = payload.get("total_count")
+        return items, total if isinstance(total, int) else None
+
+    async def get_filing_history(
+        self, number: str, *, limit: int = FILING_HISTORY_LIMIT
+    ) -> tuple[list[FilingRecord], int | None]:
+        """Recent filings, most recent first, with the register's total count."""
+        normalised = normalise_company_number(number)
+        return await self._get_items(
+            f"/company/{normalised}/filing-history",
+            FilingRecord,
+            limit=limit,
+            what="filing",
+        )
+
+    async def get_officers(
+        self, number: str, *, limit: int = MAX_ITEMS_PER_PAGE
+    ) -> tuple[list[Officer], int | None]:
+        """Officer appointments, including resigned ones — see `Officer`."""
+        normalised = normalise_company_number(number)
+        return await self._get_items(
+            f"/company/{normalised}/officers",
+            Officer,
+            limit=limit,
+            what="officer",
+        )
+
+    async def get_psc(
+        self, number: str, *, limit: int = MAX_ITEMS_PER_PAGE
+    ) -> tuple[list[PersonWithSignificantControl], int | None]:
+        """Persons with significant control.
+
+        Raises `CompanyNotFound` when the register holds no PSC record for the
+        company — which, unlike everywhere else in this module, is the ordinary
+        case rather than an anomaly, and the caller is expected to read it as
+        "none recorded". Left as an exception rather than smoothed to an empty
+        list here so the client keeps one uniform status classification and the
+        interpretation stays with the layer that has the context to make it.
+        """
+        normalised = normalise_company_number(number)
+        return await self._get_items(
+            f"/company/{normalised}/persons-with-significant-control",
+            PersonWithSignificantControl,
+            limit=limit,
+            what="psc",
+        )
 
     async def get_company_profile(self, number: str) -> CompanyProfile:
         """Look up one company by number. Raises `CompanyNotFound` if absent."""

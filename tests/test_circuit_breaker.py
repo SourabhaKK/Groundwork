@@ -6,7 +6,7 @@ asserted exactly rather than approximately.
 
 from __future__ import annotations
 
-from src.llm.circuit_breaker import BreakerState, CircuitBreaker
+from src.circuit_breaker import BreakerState, CircuitBreaker
 from tests.conftest import FakeClock
 
 

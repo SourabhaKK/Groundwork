@@ -10,8 +10,8 @@ from __future__ import annotations
 
 import pytest
 
+from src.circuit_breaker import BreakerState, CircuitBreaker
 from src.config import Settings
-from src.llm.circuit_breaker import BreakerState, CircuitBreaker
 from src.llm.router import AllProvidersFailedError, LLMRouter, LLMTier
 from tests.conftest import FakeClock
 

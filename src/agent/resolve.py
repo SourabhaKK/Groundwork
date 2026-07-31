@@ -70,6 +70,7 @@ from enum import StrEnum
 from pydantic import BaseModel, Field
 
 from src.data_sources.companies_house import (
+    LEGAL_SUFFIXES,
     CompaniesHouseAuthError,
     CompaniesHouseClient,
     CompaniesHouseUnavailable,
@@ -102,10 +103,6 @@ SHORTLIST_SIZE = 5
 # i.e. exactly the case that didn't need it. Bounded so the worst case is
 # SHORTLIST_SIZE + this, not "hydrate everything the search returned".
 FORMER_NAME_SLOTS = 3
-
-# Legal-form suffixes carry no distinguishing information — "MONZO BANK
-# LIMITED" and "Monzo Bank Ltd" are the same company to a human typing either.
-_LEGAL_SUFFIXES = ("limited", "ltd", "plc", "llp", "lp", "cic", "cio")
 
 # SIC codes that mean the company is registered but not trading. A dormant
 # shell frequently outranks the real trading entity on name similarity alone,
@@ -178,7 +175,7 @@ def normalise_name(raw: str) -> str:
     changed = True
     while changed:
         changed = False
-        for suffix in _LEGAL_SUFFIXES:
+        for suffix in LEGAL_SUFFIXES:
             if text.endswith(" " + suffix):
                 text = text[: -(len(suffix) + 1)].strip()
                 changed = True
