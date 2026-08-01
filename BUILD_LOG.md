@@ -532,3 +532,206 @@ format --check` clean.
 5. **~176 search credits** remain of the development reserve.
 
 ---
+
+## Phase 5 — Report Synthesis & Uncertainty Handling
+
+**Status:** complete. 5.1, 5.2, 5.3, 5.5, 5.6 and 5.7 done this phase; 5.4 was
+already built in Phase 3 and is **consumed unchanged** — `src/report/confidence.py`
+has zero edits. Built on branch `phase-5-synthesis`, cut from `main` at `27a9802`.
+Commits `9850d2b`, `b1ef671`. **Not merged: awaiting sign-off.**
+
+**Test status: 414 tests, all passing** (up from 375). `ruff check` and `ruff
+format --check` clean. No live provider call anywhere in the suite; the live
+pass below was run from a scratch script outside the repo.
+
+**Built:** `src/report/` — `synthesize.py` (the `Synthesizer` the graph has been
+calling since Phase 3; the seam and the graph are unchanged), `prompts.py`,
+`citations.py`, `render.py`, and `signature.py`.
+
+**The decision the whole phase rests on: the model writes prose, code renders
+every piece of structure.** Badge, per-section source table, citation numbering,
+excluded-claims note, evidence gaps, conflict blocks and the bottom working
+table are all assembled from data. Three things follow, each a requirement
+somewhere else in the plan:
+
+1. **5.7 becomes true by construction.** If both providers only ever supply
+   prose, they cannot produce differently-shaped reports. A cross-provider shape
+   guarantee resting on two model families following formatting instructions is
+   one that has to be re-earned every time a prompt changes.
+2. **7.1a's second criterion cannot drift.** The badge and the working table
+   both print from the same `ConfidenceAssessment` the graph scored on. Neither
+   counts claims a second time — `_working_row` reads `assessment.total_claims`
+   and `assessment.scored_claims` rather than measuring the list it was handed,
+   and two tests pin this by passing an assessment whose numbers deliberately
+   disagree with the claim list. The mock's own badge once conflated claim count
+   with distinct-source count, and that was a human rendering by hand.
+3. **A citation cannot be invented.** The model is never shown a URL — each
+   claim arrives with a marker already bound to it, so there is no mapping it
+   could extend. Same mechanism as Phase 4.2 one layer up, and pinned by a test
+   asserting no source URL appears in any synthesis prompt.
+
+**Four further decisions worth being able to defend:**
+
+- **One call per section, not one per report.** The band is a per-section fact
+  and the prose has to be consistent with its own band; one call holding all
+  three is how Section 3's HIGH language reaches Section 1's MEDIUM prose. It
+  also bounds truncation exposure. Section 3 still gets a read-only digest of
+  the other sections' bands and headline facts — enough to notice the kind of
+  cross-section connection the mock makes by hand — but may not cite from it,
+  because a claim gathered for another section is numbered differently there.
+- **Excluded claims are prose input, and their exclusion is rendered from data.**
+  Phase 4 carried this forward explicitly: 19 of 104 claims failed quote
+  verification in its live run. Dropped, the report looks thinner than the
+  evidence gathered *and the reason for the thinness is invisible*.
+- **A failing section degrades to a stated absence, not a missing section.** It
+  still renders its real band, sources and gaps, and says plainly that the
+  written summary is what is missing. `AllProvidersFailedError` is the exception
+  and propagates, so the graph halts rather than printing a thin report.
+- **5.7 exercises Gemini through the breaker**, never by instantiating the
+  provider — a primary that raises a transient error, exactly as an Anthropic
+  outage would. Calling `GeminiProvider` directly would breach AGENTS.md and
+  test the wrong path: the question is whether the *fallback path* holds the
+  report's shape, and that path includes the breaker.
+
+**Deviations and additions beyond the approved proposal:**
+
+1. **`src/report/signature.py`, not proposed as its own module.** D9 listed four
+   modules and put the comparator in `render.py`. It reads rendered markdown
+   rather than the objects that produced it — deliberately, so the same function
+   runs against the hand-written Phase 0.7 mock, which has no objects behind it.
+   That makes Phase 7.1's structural diff a run rather than a build.
+2. **The quality-signals badge carries a signal-strength word** (TASKS.md 5.3),
+   derived from the band rather than judged separately. Two numbers saying the
+   same thing is how they start disagreeing.
+3. **`json_payload` added to `src/llm/json_parsing.py` and adopted by
+   extraction and query refinement as well** — a Phase 4 / Phase 3 module changed
+   from inside Phase 5. Reasoning under finding 2 below; it was a live
+   correctness bug, not a refactor.
+
+---
+
+### The live pass, and the three failures it found
+
+Three full runs against real data. Run 1 established the baseline, runs 2 and 3
+verified fixes. **5 Tavily credits each, 15 total; ~176 → ~161 of the
+development reserve.** Two diagnostic passes rebuilt prompts from the saved run
+state and cost 0 credits. Every model call went through the router.
+
+**1. The report was written entirely by the fallback, and the primary wrote none
+of it.** Run 1: all three Sonnet synthesis calls returned no parseable JSON and
+every section rendered the honest "synthesis did not complete" placeholder,
+while Gemini — reached through the tripped breaker — produced the whole report.
+The mechanism is the exact asymmetry Phase 3 recorded, arriving from the
+opposite direction. `MAX_SECTION_TOKENS` was set to 2,000 *to protect the
+fallback*, on Phase 3's measurement that a 2.5-generation model spends
+`max_output_tokens` on internal reasoning before emitting visible text. What
+that reasoning missed is that **Sonnet 5 runs adaptive thinking by default when
+the `thinking` parameter is omitted** — unlike the generation before it, where
+omitting the parameter meant no thinking at all — and `max_tokens` caps thinking
+*and* response text together. So the cap chosen to protect the fallback starved
+the primary. Isolated by re-running one section's prompt at two caps: 1,327
+characters of unterminated JSON at 2,000, 4,502 characters of complete JSON at
+6,000. Fixed by raising the cap; `stop_reason == "max_tokens"` is now logged,
+because a truncated response is an HTTP 200 and was otherwise invisible.
+
+**Worth stating for the design note: without the cross-provider check, this
+ships looking fine.** A report was produced, it had the right shape, and every
+band and source table in it was correct — because all of that is rendered from
+data. Only the prose was missing, and only comparing the two providers showed
+that the primary had contributed none of it.
+
+**2. The failure that was not a Phase 5 failure. Sonnet writes literal newlines
+inside JSON strings; Gemini escapes them.** Run 2, with the cap fixed: business
+model parsed, the other two sections failed schema validation. The diagnosis was
+not a schema mismatch at all — `json.loads` rejects a raw control character
+inside a string, and Sonnet writes multi-paragraph prose with the paragraph
+breaks as actual newlines. Both providers return the same response as far as the
+model is concerned; the standard library accepts one and rejects the other.
+
+**The same log line appeared on a Companies House filing-history document in the
+same run, which makes this a correction to Phase 4 rather than a Phase 5
+finding.** In extraction a rejected response means the document contributes **no
+claims at all** — a claim count moving, and therefore a confidence band moving,
+because a model used a newline. Nothing surfaced it but one warning line, and
+**Phase 4's recorded live-pass claim counts were measured with this bug active**,
+so they undercount what the same run would produce today. Fixed in the shared
+`json_parsing` module with `strict=False`, the standard library's own switch for
+exactly this, and adopted by extraction and 3.5's query refinement too. The
+alternative — a regex escaping newlines inside string literals before parsing —
+was rejected as hand-repairing a model response, the class of thing AGENTS.md's
+no-hand-parsing rule exists to prevent. `tests/test_json_parsing.py` pins both
+providers' shapes, and asserts the fixture is genuinely strict-invalid so the
+test cannot quietly stop testing anything.
+
+**3. Cross-provider equivalence, measured rather than eyeballed: zero
+differences.** Run 3, both providers on the same evidence:
+`structural_signature()` reduces a rendered report to section headings and
+order, band per section, presence of each block, source-table row counts and
+authority tiers, citation markers used, working-table rows, and trailing
+content. **Claude and Gemini produced identical signatures** — not similar,
+equal — while their prose differs completely. That is 5.7 satisfied on real
+evidence rather than by argument, and it is a property of the design rather than
+a lucky run: the shape does not come from the model.
+
+### The structural diff against the Phase 0.7 mock — reported as found
+
+**11 differences, and none of them are shape.** Every structural field matches:
+section count, order and headings; badge present with a band; conflict block,
+evidence-gaps block, sources table and exclusion note present in each section;
+the working table with three rows; no summary table at the top; no trailing
+content after the working table. The 11 differences are all **evidence volume**:
+
+- **Bands.** Section 1 scored HIGH against the mock's MEDIUM. The mock's MEDIUM
+  came from a MINOR conflict over adjusted-vs-statutory profit; the real run
+  never retrieved the trade-press article that produced that disagreement.
+- **Source counts and tiers.** 8/5/8 sources against the mock's 4/4/3, and
+  markedly more `general_web`. The mock was hand-built from four
+  carefully-chosen sources per section; a real Tavily pass returns what ranks.
+- **Citation markers.** Follows directly from the source counts.
+- **Section 3 carries a conflict block the mock does not** — a real MINOR
+  disagreement between two Trustpilot figures (4.6 vs 4.5) from different pages.
+
+Read honestly, that is the mock working as specified: **a floor on shape, not a
+ceiling on quality.** The shape conformance Phase 7.1 asks for holds. Whether
+the substance is better is 7.1a's question, and three observations from reading
+the output bear on it — recorded here rather than smoothed over:
+
+- **A MAJOR conflict is present in business model and the band is still HIGH.**
+  It did not fire because `score_confidence` counts a conflict only when every
+  claim it references scores, and the 49% claim failed quote verification. This
+  is the *same* 40%-vs-49% denominator misread Phase 4 disclosed, reaching the
+  same correct-by-luck outcome for the same reason. It is rendered — the block
+  says MAJOR and says it did not move the band, and the prose reports both
+  figures without reconciling them — which is the honest handling of a known
+  rough edge, not a fix.
+- **Filing-history over-enumeration is still visible**, as expected: 95 claims
+  across three sections against the mock's 17. The Phase 4 limitation is
+  unchanged and still needs its Phase 2 rendering decision.
+- **One extraction-quality slip worth logging for 7.1a:** the prose says
+  "full accounts for the year to 1 September 2025", conflating the filing date
+  with the period end. That is a claim stating something its source does not
+  support — 7.1a's third criterion — and it originates in extraction, not
+  synthesis.
+
+**The badge's tier summary describes scoring sources only**, which is why a
+badge can say "2 `official_registry`" while the table below lists 3. Deliberate:
+the badge describes what the band rests on. Recorded because it reads as an
+inconsistency until you know that.
+
+**Carried forward — what Phase 6 needs to know:**
+
+1. **Render `ReportState`, don't re-derive it.** `state.report` is the finished
+   markdown; `state.assessments`, `state.claims`, `state.conflicts` and
+   `state.decisions` are the deliverable alongside it. The frontend should
+   surface the decision log — it is the evidence for the "agent design"
+   criterion — and must never recompute a band.
+2. **`structural_signature()` is Phase 7.1's diff tool**, already validated
+   against the mock and against both providers. 7.1 is a run, not a build.
+3. **Synthesis costs three Sonnet calls per report** at up to 6,000 output
+   tokens each, on top of extraction's one Haiku call per document. Worth
+   knowing before 6.4's cold-start and timeout work: the graph's wall clock is
+   now dominated by extraction fan-out plus three synthesis calls.
+4. **~161 search credits** remain of the development reserve.
+5. **A section can fail without the report failing.** `SectionRender.warnings`
+   records stripped citations and failed calls; nothing currently surfaces them
+   to the API response, and Phase 6 may want to.
