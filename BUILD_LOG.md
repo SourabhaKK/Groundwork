@@ -385,9 +385,46 @@ directors and 1 secretary") plus six resignations named individually *because
 they were independently significant* — two directors who served under three
 months, which is exactly the judgement the rule asks for. Filing history was
 **unchanged**: still nine one-row-per-claim. The same instruction, in the same
-prompt, on two documents from the same endpoint family. **This is an open
-correctness risk carried out of Phase 4, not a solved problem** — see the
-decision below.
+prompt, on two documents from the same endpoint family.
+
+**Second attempt, and the diagnosis it produced.** A filing-history-specific
+worked example was then added — the actual rows, the three correct pattern
+claims, and the nine wrong ones spelled out as the anti-example. **It made the
+document worse: 9 → 12 claims, still one per row.** Officers collapsed further,
+to 2. So the instruction was not being missed for want of a concrete example.
+
+What isolated it was running the same prompt against the same document with the
+noise removed. The filing-history document renders the **100 most recent filings
+of 213 on the register**, and about 90 of those rows are opaque officer-movement
+codes — `2026-07-30 — officers —
+termination-director-company-with-name-termination-date`, repeated. Filtered to
+the 13 rows that are accounts or confirmation statements, the same prompt and
+the same model returned **exactly the three claims the worked example asks for**,
+in its shape:
+
+> "The company has filed annual accounts in each of the last six years, most
+> recently full accounts filed on 1 September 2025."
+> "The company has filed a confirmation statement in each of the last four
+> years, most recently on 11 November 2025."
+> "The company changed from filing group accounts to filing full accounts…"
+
+**So this is not prompt non-compliance. It is document shape.** A hundred rows
+of mostly machine codes drives enumeration, and no amount of instruction
+survives that; the same instruction works on the officers document, which is 9
+readable rows. Worth stating for the design note because it generalises: how
+evidence is *rendered* into a document silently sets what extraction does with
+it, and that rendering decision was made in Phase 2 for a different reason — one
+document per endpoint, to stop fifty filings inflating apparent evidence volume.
+It stopped them inflating the *document* count and did nothing about the *claim*
+count, which is what Phase 5.4 actually scores.
+
+The fix therefore belongs in `registry_documents`, not in the prompt and not in
+a scoring cap: collapse the officer-movement rows into a count rather than
+listing ninety of them, since those events are already fully represented in the
+officers document. **Not applied — it changes what an evidence document
+contains, which is Phase 2's layer and warrants its own decision.** Recorded in
+README §5 as a disclosed limitation in the meantime. **This is an open
+correctness risk carried out of Phase 4, not a solved problem.**
 
 **3. The over-fragmentation guard fired on real data, exactly where the worked
 example predicted.** Monzo's annual report produced 14 claims: every metric, and
@@ -408,7 +445,8 @@ because loosening the check to accept non-contiguous fragments would make it
 stop catching the thing it exists to catch.
 
 **5. Conflict detection surfaced a genuinely good conflict and one
-misclassification.** The good one: Trustpilot rates `www.monzo.com` at 4.6 and
+misclassification — the second is a disclosed known limitation, not an
+incidental observation.** The good one: Trustpilot rates `www.monzo.com` at 4.6 and
 `web.monzo.com` at 1.8 — two real pages for the same company, flagged MAJOR.
 That is the kind of disagreement the brief wants surfaced rather than resolved,
 and neither side was dropped. The misclassification: "40% of customers use Monzo
@@ -419,6 +457,18 @@ claim came from the annual report and had already been excluded by the
 over-fragmentation guard, and `score_confidence` only counts a conflict when
 every claim it references scores. A correct outcome reached by luck, and worth
 saying so plainly rather than presenting the band as evidence the rule works.
+
+**Logged as a known limitation and carried, not fixed.** A false MAJOR is
+one-directional — it takes a section to LOW when its evidence does not actually
+disagree, so it can only understate confidence, never inflate it. That is the
+safe direction, which is why it is disclosed rather than patched under time
+pressure. The fixes considered and rejected for now: refusing conflicts between
+figures with different units (misses most real conflicts, which are not
+numeric), and requiring two independent classification passes to agree (doubles
+the cost of every report to catch a bounded, safe-direction error). The shape a
+real fix would take is a second pass that must state the *basis* of the
+disagreement, giving a denominator mismatch somewhere to be declared. Written up
+in README §5 so it is visible to a reader who never opens this log.
 
 **6. The entity-warning requirement, verified live — after the first attempt
 quietly did the wrong thing.** One basic search returned four real Better
@@ -463,10 +513,13 @@ format --check` clean.
 **Deferred / carried forward — what Phase 5 needs to know:**
 
 1. **Filing-history over-fragmentation is unresolved** and is the one open
-   correctness risk from this phase. See the decision put to Sourabha at the end
-   of the session: a per-document ceiling on *scoring* claims is the proposed
-   fix, and it was not applied because it changes what a claim count means,
-   which is Phase 5.4's territory and settled spec.
+   correctness risk from this phase. Two fixes were tried and rejected on
+   evidence rather than taste: a per-document ceiling on scoring claims (turned
+   down — it changes what a claim count means, which is 5.4's settled spec), and
+   two rounds of prompt instruction including a document-specific worked example
+   (tried; made it worse, 9 → 12). The diagnosis above locates the cause in how
+   `registry_documents` renders filing history, so **the fix is Phase 2's to
+   make and needs its own decision.** Disclosed in README §5 until then.
 2. **Excluded claims are a large fraction of the output** — 19 of 104 in the
    live run, before the guard's 14. Phase 5's prose must render them, with their
    `exclusion_reason`, or the report will look thinner than the evidence

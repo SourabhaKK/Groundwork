@@ -212,7 +212,40 @@ It has no stake in what it says about the company.
      once per row, and it inflates the evidence count without adding evidence.
   Name a specific row only where that row is independently significant on its
   own — an insolvency filing, a change of company name, a director who resigned
-  within months of appointment.""",
+  within months of appointment.
+
+WORKED EXAMPLE — a filing history. Given these rows:
+
+  2025-09-01 — accounts — Full accounts made up to 2025-02-28
+  2025-11-11 — confirmation-statement — Confirmation statement with updates
+  2024-10-15 — accounts — Full accounts made up to 2024-02-29
+  2024-11-25 — confirmation-statement — Confirmation statement with updates
+  2023-06-30 — accounts — Group accounts made up to 2023-02-28
+  2022-08-09 — accounts — Group accounts made up to 2022-02-28
+  2021-09-13 — accounts — Group accounts made up to 2021-02-28
+  2021-05-07 — confirmation-statement — Confirmation statement with no updates
+  2020-11-13 — accounts — Group accounts made up to 2020-02-29
+
+CORRECT — three claims:
+  1. "The company has filed annual accounts in each of the last six years, most
+      recently full accounts for the year to 28 February 2025, filed on
+      1 September 2025."
+  2. "The company has filed a confirmation statement in each of the last two
+      years, most recently on 11 November 2025."
+  3. "The company moved from group accounts to full accounts with the year to
+      29 February 2024." — a change in what is filed, not just another row.
+
+WRONG — nine claims:
+  "The company filed full accounts on 1 September 2025."
+  "The company filed full accounts on 15 October 2024."
+  "The company filed group accounts on 30 June 2023."
+  ...and one per remaining row. Every one of these is true, and together they are
+  a single fact — this company files on time — reported nine times. Nine claims
+  from one page is nine times the evidence weight for one source, and the
+  confidence rule counts claims.
+
+Apply the same shape to any register list: the pattern first, then only the rows
+that are exceptions to it.""",
     "self": """\
 This document is the company's own account of itself. It is primary and often
 audited, but it is self-interested.
