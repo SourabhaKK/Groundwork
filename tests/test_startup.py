@@ -109,9 +109,7 @@ def test_a_placeholder_credential_is_rejected_like_a_missing_one(
 
 
 @pytest.mark.parametrize("token", ["local-dev-token-abc123", "dev-token-xyz", "local-whatever"])
-def test_a_development_demo_token_is_rejected(
-    token: str, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_a_development_demo_token_is_rejected(token: str, monkeypatch: pytest.MonkeyPatch) -> None:
     """Separate from the placeholder rule because such a token genuinely works —
     it is simply not the one that should gate a public URL running on a personal
     API key, and nothing downstream would ever flag it."""

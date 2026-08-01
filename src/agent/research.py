@@ -32,6 +32,7 @@ from pydantic import BaseModel, Field, ValidationError
 from src.data_sources.companies_house import CompanyProfile
 from src.data_sources.sources import distinctive_tokens
 from src.data_sources.web_gather import WebSection, build_queries, trading_name
+from src.llm.json_parsing import json_object
 from src.llm.router import LLMRouter, LLMTier
 
 logger = logging.getLogger(__name__)
@@ -223,20 +224,16 @@ def fallback_query(section: WebSection, profile: CompanyProfile) -> str:
 def _parse(raw: str) -> RefinedQuery | None:
     """Validate the model's JSON with Pydantic, never by hand.
 
-    Only fenced-code stripping happens here; the fields themselves are parsed by
-    `model_validate_json`, per AGENTS.md's rule that no LLM response is picked
-    apart field by field in application code.
+    Only fenced-code stripping happens here — via `json_object`, shared with
+    Phase 4.2's extractor since both do the identical step — while the fields
+    themselves are parsed by `model_validate_json`, per AGENTS.md's rule that no
+    LLM response is picked apart field by field in application code.
     """
-    text = raw.strip()
-    if text.startswith("```"):
-        text = re.sub(r"^```[a-zA-Z]*\n?", "", text)
-        text = re.sub(r"\n?```$", "", text).strip()
-
-    start, end = text.find("{"), text.rfind("}")
-    if start == -1 or end <= start:
+    payload = json_object(raw)
+    if payload is None:
         return None
     try:
-        return RefinedQuery.model_validate_json(text[start : end + 1])
+        return RefinedQuery.model_validate_json(payload)
     except ValidationError:
         return None
 

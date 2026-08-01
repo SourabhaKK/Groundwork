@@ -157,9 +157,7 @@ async def gather_registry_node(state: ReportState, deps: AgentDependencies) -> d
                 "pull filings, officers and PSC",
                 "the register is the one source with no stake in what it reports, so it "
                 "anchors every section",
-                outcome=f"{len(gather.failures)} gap(s)"
-                if gather.failures
-                else "complete",
+                outcome=f"{len(gather.failures)} gap(s)" if gather.failures else "complete",
                 missing=gather.missing,
             )
         ],
@@ -459,8 +457,7 @@ async def research_node(state: ReportState, deps: AgentDependencies) -> dict:
                 decision(
                     RESEARCH,
                     f"re-search {refinement.section.value}",
-                    refinement.targets_gap
-                    or "the first pass left this section under-evidenced",
+                    refinement.targets_gap or "the first pass left this section under-evidenced",
                     outcome=f"no results — {reason}",
                     **_refinement_detail(refinement),
                 )
@@ -481,8 +478,7 @@ async def research_node(state: ReportState, deps: AgentDependencies) -> dict:
             decision(
                 RESEARCH,
                 f"re-search {refinement.section.value}",
-                refinement.targets_gap
-                or "the first pass left this section under-evidenced",
+                refinement.targets_gap or "the first pass left this section under-evidenced",
                 outcome=f"{len(result.results)} result(s), {result.credits_spent} credit(s)",
                 **_refinement_detail(refinement),
             )

@@ -88,9 +88,9 @@ def build_graph(deps: AgentDependencies):
     # Extraction can halt on a total provider outage; otherwise it always scores.
     graph.add_conditional_edges(
         nodes.EXTRACT,
-        lambda state: nodes.HALT
-        if state.outcome is RunOutcome.PROVIDER_FAILURE
-        else nodes.EVALUATE,
+        lambda state: (
+            nodes.HALT if state.outcome is RunOutcome.PROVIDER_FAILURE else nodes.EVALUATE
+        ),
         [nodes.EVALUATE, nodes.HALT],
     )
 

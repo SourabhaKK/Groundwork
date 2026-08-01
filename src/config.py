@@ -164,7 +164,7 @@ class Settings(BaseSettings):
             raise ValueError(
                 "demo_access_token looks like a local development token. The hosted demo "
                 "is public and runs on a personal API key — generate a strong random token "
-                "for it (e.g. `python -c \"import secrets; print(secrets.token_urlsafe(32))\"`)."
+                'for it (e.g. `python -c "import secrets; print(secrets.token_urlsafe(32))"`).'
             )
         return value
 
