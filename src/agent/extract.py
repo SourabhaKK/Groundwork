@@ -162,7 +162,11 @@ The test, when a fact sits near the boundary:
   Only makes sense as a qualifier -> fold it into the claim it qualifies.
 
 Do not bundle distinct facts together just because they share a citation.
-Do not split one fact into several by rephrasing it or quoting it twice."""
+Do not split one fact into several by rephrasing it or quoting it twice.
+
+Every claim must be a fact about the company under report. Context about the
+regulator, the market or the wider industry is not a claim about this company,
+however interesting it is."""
 
 _REGISTRY_EXAMPLE = """\
 Worked example (an FCA enforcement notice):
@@ -197,7 +201,18 @@ It has no stake in what it says about the company.
   late" is in the document; "the company has cash-flow problems" is not.
 - Absence recorded by a register is itself a fact, and worth a claim when the
   document states it (for example, no person registered as having significant
-  control).""",
+  control).
+- A register document is often a LIST — filings, officers, controlling persons.
+  One row is not one claim. A row is a record; the fact an underwriter can act
+  on is the pattern across the rows. Extract the pattern:
+    "The company has filed accounts in each of the last six years, most recently
+     on 1 September 2025." -> one claim.
+    "The company filed accounts on 1 September 2025." + "The company filed
+     accounts on 15 October 2024." + ... -> WRONG. That is one fact reported
+     once per row, and it inflates the evidence count without adding evidence.
+  Name a specific row only where that row is independently significant on its
+  own — an insolvency filing, a change of company name, a director who resigned
+  within months of appointment.""",
     "self": """\
 This document is the company's own account of itself. It is primary and often
 audited, but it is self-interested.
@@ -288,9 +303,13 @@ WARNING - POSSIBLE ENTITY MISMATCH. This document appears to be about {warning},
 which is NOT the company under report ({company}). It may be a foreign affiliate
 or an unrelated company with a similar name.
 
-Extract only what the document actually supports, and begin every claim's text
-by naming the entity the document is really about, so no reader can mistake it
-for a fact about {company}. Do not attribute anything here to {company}.
+Still extract the facts this document supports. They are not discarded — they
+are reported as facts about {warning}, and a reader deciding whether a foreign
+affiliate matters to their assessment needs to see them. What you must not do is
+attribute any of them to {company}.
+
+So: begin every claim's text by naming the entity the document is really about,
+and phrase it so no reader could mistake it for a fact about {company}.
 
 """
 

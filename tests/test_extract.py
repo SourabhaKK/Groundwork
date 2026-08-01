@@ -372,7 +372,12 @@ def test_the_warned_prompt_states_the_mismatch() -> None:
 
     assert "ENTITY MISMATCH" in prompt
     assert "Monzo, Inc." in prompt
-    assert "Do not attribute anything here to MONZO BANK LIMITED" in prompt
+    # It asks for the facts to be extracted and attributed elsewhere, not
+    # withheld. The live pass found the first wording produced a flat refusal,
+    # which silently reverted to the option this design rejected: dropping the
+    # evidence instead of surfacing it under the right entity.
+    assert "Still extract the facts this document supports" in prompt
+    assert "must not do is\nattribute any of them to MONZO BANK LIMITED" in prompt
 
 
 # ---------------------------------------------------------------------------
