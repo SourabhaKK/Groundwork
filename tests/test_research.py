@@ -221,7 +221,11 @@ async def test_a_paraphrasing_model_falls_back_to_the_template(
     router = FakeRouter(f'{{"query": "{original}", "targets_gap": "same thing again"}}')
 
     refinement = await refine_query(
-        section=SECTION, profile=profile, gap="thin", seen_urls=[], router=router  # type: ignore[arg-type]
+        section=SECTION,
+        profile=profile,
+        gap="thin",
+        seen_urls=[],
+        router=router,  # type: ignore[arg-type]
     )
 
     assert refinement.source is RefinementSource.FALLBACK_TEMPLATE
@@ -234,7 +238,11 @@ async def test_an_unparseable_reply_falls_back(profile: CompanyProfile) -> None:
     router = FakeRouter("Sure! Here's a great query for you.")
 
     refinement = await refine_query(
-        section=SECTION, profile=profile, gap="thin", seen_urls=[], router=router  # type: ignore[arg-type]
+        section=SECTION,
+        profile=profile,
+        gap="thin",
+        seen_urls=[],
+        router=router,  # type: ignore[arg-type]
     )
 
     assert refinement.source is RefinementSource.FALLBACK_TEMPLATE
@@ -250,7 +258,11 @@ async def test_a_fenced_json_reply_is_still_parsed(profile: CompanyProfile) -> N
     )
 
     refinement = await refine_query(
-        section=SECTION, profile=profile, gap="thin", seen_urls=[], router=router  # type: ignore[arg-type]
+        section=SECTION,
+        profile=profile,
+        gap="thin",
+        seen_urls=[],
+        router=router,  # type: ignore[arg-type]
     )
 
     assert refinement.source is RefinementSource.MODEL
@@ -264,7 +276,11 @@ async def test_a_provider_outage_degrades_to_the_template_and_never_raises(
     router = FakeRouter(RuntimeError("all providers failed"))
 
     refinement = await refine_query(
-        section=SECTION, profile=profile, gap="thin", seen_urls=[], router=router  # type: ignore[arg-type]
+        section=SECTION,
+        profile=profile,
+        gap="thin",
+        seen_urls=[],
+        router=router,  # type: ignore[arg-type]
     )
 
     assert refinement.source is RefinementSource.FALLBACK_TEMPLATE
