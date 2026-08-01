@@ -269,3 +269,213 @@ purpose is grounding.
    the live 3.5 run, 2 on the depth comparison).
 
 ---
+
+## Phase 4 — Structured Extraction
+
+**Status:** complete. 4.1 was already built in Phase 3; 4.2 and 4.3 done this
+phase. Built on branch `phase-4-extraction`, cut from `phase-3-orchestration`
+because `main` does not contain Phase 3 — see the correction below. Commits
+`338c4ea`, `a77a3dd`, `4323a40`, `f831f65`. **Not merged: awaiting sign-off.**
+
+**Correction to Phase 3's entry, per this log's own rule about never editing a
+past entry.** Phase 3's entry is the only one with no `Status:` line and no
+`Test status:` section, and TASKS.md ticks Phase 3 complete while its work sits
+unmerged on `phase-3-orchestration` — `main` is still at `182224d`, the Phase 2
+merge. The missing test-status line is not just bookkeeping: `ruff format
+--check .` was failing on five files, all of them arriving in the four commits
+on that branch, so **CI's formatting step was red on Phase 3 and nobody knew**.
+`main` is verified format-clean, which is how the failure was localised. Fixed
+in `338c4ea` as a separate commit. For the record, Phase 3 as it stands: 328
+tests passing, `ruff check` clean, `ruff format` now clean.
+
+**Built:** `src/agent/extract.py` — the implementation behind
+`AgentDependencies.extractor`, the seam Phase 3 left open. The graph is
+unchanged. Plus `src/llm/json_parsing.py`, a shared fenced-JSON finder, because
+3.5's query refinement and 4.2's extraction now do the identical step and a
+second copy would drift.
+
+**The four decisions worth being able to defend:**
+
+- **One model call per document, not per section.** 4.2 requires per-source-type
+  framing, and source type is a property of a document — a section-level call
+  puts an officer list and a Trustpilot snippet in one prompt and averages the
+  two framings. The real payoff is the next point.
+- **The model has no field through which a URL can arrive.** `source_url`,
+  `source_type`, `section` and `origin` are attached here from the
+  `TaggedDocument`; the response carries only the fact, a verbatim quote, and
+  how directly the source supports it. AGENTS.md's never-fabricate-a-citation
+  boundary is therefore unrepresentable rather than discouraged. A section-level
+  prompt would have had to hand the model a menu of URLs to choose from, which
+  is the exact mechanism by which a claim gets bound to the wrong source.
+- **Every claim carries a quote, checked against the source text.** Normalised
+  for typography, then a substring test. An unverifiable quote costs the claim
+  its *score*, never its place in the report.
+- **`entity_warning` is enforced in code, not by prompt.** A warned document's
+  claims are unconditionally marked non-scoring, with the mismatch written into
+  the claim text by us. The prompt is a request; only code makes "must not
+  silently absorb" structurally true.
+
+**Deviations and additions beyond the approved proposal:**
+
+1. **`EvidenceClaim.id` now hashes `source_url + section + text`** (approved
+   before implementation as D7, recorded here as a change to a Phase 3
+   artifact). It hashed url+text, so the same URL gathered for two sections
+   collapsed to one claim in `merge_claims` — exactly the shape Phase 2's live
+   trial recorded when Wikipedia came back in two sections. Phase 5.4 counts per
+   section, so the second section silently lost a claim it had genuinely
+   gathered. A band moving on a hash collision. Second-pass idempotence is
+   unaffected and is pinned by its own test.
+2. **`MAX_CLAIMS_PER_DOCUMENT = 12`, added during implementation, not proposed.**
+   Above it, a document's claims are all kept but none score. The don't-split
+   half of the granularity rule has no mechanical enforcer and every count-based
+   condition in `score_confidence` trusts it. Safe direction only — it can
+   withhold confidence, never manufacture it — and it fired on real data (see
+   below), so it is not theoretical.
+3. **Conflict detection compares claims per section**, with the model
+   referencing claims by list position and the positions mapped back to real ids
+   here. An out-of-range position is discarded rather than guessed at.
+
+---
+
+### The live pass, and what reading the claims found
+
+Per Phase 3's lesson, the point was to read what came out, not to count it. One
+full run against real data: Companies House 09446231 (4 documents), a real
+`gather_web` (15 results, **5 credits**), and the FCA enforcement notice fetched
+live (HTTP 200, 3,339 characters of text after tag-stripping) — the document the
+Phase 4.1 worked example says chunks into exactly 5 claims. Then two cheap
+re-runs against the same saved documents (**0 further credits**) to test fixes,
+plus one basic search (**1 credit**) for the entity-warning case. **6 credits
+total; ~182 → ~176 of the development reserve.**
+
+First run: **104 claims from 20 documents, 85 scored, 5 conflicts.** Bands
+business_model HIGH, competitive_landscape HIGH, reputation MEDIUM. All three
+plausible at a glance — which is exactly why the claims had to be read.
+
+**1. Granularity on the FCA notice: 7 claims against the worked example's 5,
+and the two extra were different failures.** One was a genuine over-split (the
+requirement breach and the 34,000 accounts opened in breach of it came back as
+two claims; the worked example folds them into one). The other was not a
+granularity error at all: *"This was the 10th fine the FCA has imposed on a bank
+for financial crime control failings in the last 4 years."* That is a fact about
+the **FCA**, not about Monzo, and nothing in the prompts said claims had to be
+about the company under report — it was assumed. Fixed; every prompt now says
+so, and the claim is gone on re-run. The notice now yields 6, within the ±1 the
+rule tolerates if the breach split is counted as the one disagreement.
+
+**2. The failure that would have shipped: register list documents extracted one
+claim per row.** The filing-history document produced nine claims of the form
+*"The company filed full accounts on 1 September 2025."* The officers document
+produced nine of *"X was appointed director on DATE."* All eighteen scored, all
+routed to reputation, which is the correct section — governance signals are
+Section 3 — so reputation carried 37 scored claims of which half were filing-
+clerk records. It did not move a band *in this run*, because the FCA notice and
+the officer facts would have carried reputation to HIGH anyway. **The exposure
+is a thin company**: nine filing rows alone clear HIGH's `>= 3` gate with an
+`official_registry` source present, so a business with no press coverage and no
+regulatory history could report HIGH confidence on the strength of having filed
+its accounts. That is precisely the failure Phase 7.1a's fourth criterion
+exists to catch, arriving from a direction nobody was watching.
+
+The registry framing now says a row is a record while the fact is the pattern
+across rows, with the filing-history case as the literal example. **It half
+worked, and the half that did not is the honest finding.** Officers went 9 → 7
+and changed shape entirely: an aggregate ("9 current officers comprising 6
+directors and 1 secretary") plus six resignations named individually *because
+they were independently significant* — two directors who served under three
+months, which is exactly the judgement the rule asks for. Filing history was
+**unchanged**: still nine one-row-per-claim. The same instruction, in the same
+prompt, on two documents from the same endpoint family. **This is an open
+correctness risk carried out of Phase 4, not a solved problem** — see the
+decision below.
+
+**3. The over-fragmentation guard fired on real data, exactly where the worked
+example predicted.** Monzo's annual report produced 14 claims: every metric, and
+then every growth percentage as a separate claim — "revenue £1.7bn" and "revenue
+grew 39%" as two facts. The worked example names this as the clearest form of
+over-fragmentation. All 14 were excluded from scoring and kept in prose. Without
+the guard, one self-published page would have contributed 14 claims to
+business_model's count.
+
+**4. Quote verification excluded 19 of 104 claims (18%), and the false-rejection
+rate is concentrated by document shape.** Nearly all were the annual report and
+Trustpilot — pages whose content arrives as a mangled table, where the figure is
+genuinely present but not as a contiguous span the model can quote. So the check
+does what it was built for (a fabricated quote fails) at a real cost (a true fact
+in a table can fail too). The direction is safe: the claim still renders, it
+just does not score. Recorded as a known limitation rather than tuned away,
+because loosening the check to accept non-contiguous fragments would make it
+stop catching the thing it exists to catch.
+
+**5. Conflict detection surfaced a genuinely good conflict and one
+misclassification.** The good one: Trustpilot rates `www.monzo.com` at 4.6 and
+`web.monzo.com` at 1.8 — two real pages for the same company, flagged MAJOR.
+That is the kind of disagreement the brief wants surfaced rather than resolved,
+and neither side was dropped. The misclassification: "40% of customers use Monzo
+as their main account" versus "49% of monthly active users use it as a primary
+bank" was called MAJOR. Those are different denominators, not a contradiction —
+MINOR at worst. It did not drag business_model to LOW **only because** the 49%
+claim came from the annual report and had already been excluded by the
+over-fragmentation guard, and `score_confidence` only counts a conflict when
+every claim it references scores. A correct outcome reached by luck, and worth
+saying so plainly rather than presenting the band as evidence the rule works.
+
+**6. The entity-warning requirement, verified live — after the first attempt
+quietly did the wrong thing.** One basic search returned four real Better
+Business Bureau pages for **Monzo, Inc.**, the US entity, with the warning
+computed by `names_a_different_entity` on real content. First run: **zero claims
+from all four documents.** The model refused outright. TASKS.md 4.2 permits
+refusal, so this passed the letter of the requirement — but D5 chose flagging
+over refusal precisely because dropping the evidence hides something a reader
+may want, and one of those pages carries a real fact ("30 total complaints in
+the last 3 years, 9 closed in the last 12 months"). The prompt had reverted the
+decision by accident. Reworded to ask for the facts while forbidding attribution
+to the UK company, then re-run: **5 claims, none scoring, every one prefixed
+`[Refers to "Monzo, Inc.", not MONZO BANK LIMITED]`, band LOW/NO_CLAIMS.** The
+prefix is written by code, so it holds whatever the model returns — pinned by a
+test that feeds in a maximally uncooperative response attributing the complaints
+flatly to the UK bank.
+
+**Incidental:** the same fact arrived from two BBB URLs (page 1 and page 3 of
+the same complaints listing) as two claims. Different URLs, so different ids,
+so `merge_claims` keeps both. Cross-document duplication of one fact is not
+handled and would inflate a count if it happened to scoring claims. It did not
+here, because everything from those documents is excluded.
+
+**Test status: 375 tests, all passing** (up from 328). `ruff check` and `ruff
+format --check` clean.
+
+- **Covered this phase:** the entity-warning requirement with an unwarned twin
+  as the control and an end-to-end check that the band actually moves; that
+  provenance comes from the document and an invented `source_url` in the
+  response cannot reach a claim; quote verification including the typography
+  case, the fabricated case and the too-short case; the over-fragmentation guard
+  and its control at the boundary; register claims routed by section and dropped
+  when unrouted; a full pass versus a narrowed second pass; per-document failure
+  isolation versus a total outage propagating; conflicts mapped to real ids,
+  with out-of-range and self-referencing conflicts discarded; and the id fix in
+  both directions — two sections keep two claims, a re-extraction still
+  collapses to one.
+- **Not covered:** nothing asserts the *quality* of a claim's wording, and
+  nothing can. That is Phase 7.1a's rubric, and the live pass above is the only
+  thing standing in for it today.
+
+**Deferred / carried forward — what Phase 5 needs to know:**
+
+1. **Filing-history over-fragmentation is unresolved** and is the one open
+   correctness risk from this phase. See the decision put to Sourabha at the end
+   of the session: a per-document ceiling on *scoring* claims is the proposed
+   fix, and it was not applied because it changes what a claim count means,
+   which is Phase 5.4's territory and settled spec.
+2. **Excluded claims are a large fraction of the output** — 19 of 104 in the
+   live run, before the guard's 14. Phase 5's prose must render them, with their
+   `exclusion_reason`, or the report will look thinner than the evidence
+   gathered and the reason for the thinness will be invisible.
+3. **`ClaimExtractor(router, detect_conflicts=False)`** exists for callers that
+   want claims without the comparison pass; the graph uses the default.
+4. **A conflict can be surfaced without affecting a band**, by design — an
+   excluded claim's disagreement still renders. Phase 5.5's badge must not imply
+   otherwise.
+5. **~176 search credits** remain of the development reserve.
+
+---
