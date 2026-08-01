@@ -65,7 +65,7 @@ from src.agent.claims import (
 )
 from src.data_sources.sources import EvidenceBundle, SourceType, TaggedDocument
 from src.data_sources.web_gather import WebSection
-from src.llm.json_parsing import json_object
+from src.llm.json_parsing import json_payload
 from src.llm.router import AllProvidersFailedError, LLMRouter, LLMTier
 
 logger = logging.getLogger(__name__)
@@ -701,12 +701,12 @@ class ClaimExtractor:
             max_tokens=_MAX_OUTPUT_TOKENS,
         )
 
-        payload = json_object(response.text)
+        payload = json_payload(response.text)
         if payload is None:
             logger.warning("extract %s: no JSON object in response", document.url)
             return []
         try:
-            proposed = _ProposedClaims.model_validate_json(payload)
+            proposed = _ProposedClaims.model_validate(payload)
         except ValidationError as exc:
             logger.warning("extract %s: unusable JSON (%s)", document.url, exc.error_count())
             return []
@@ -789,11 +789,11 @@ class ClaimExtractor:
             max_tokens=_MAX_OUTPUT_TOKENS,
         )
 
-        payload = json_object(response.text)
+        payload = json_payload(response.text)
         if payload is None:
             return []
         try:
-            proposed = _ProposedConflicts.model_validate_json(payload)
+            proposed = _ProposedConflicts.model_validate(payload)
         except ValidationError:
             logger.warning("conflict detection %s: unusable JSON", section.value)
             return []

@@ -38,7 +38,7 @@ from src.agent.resolve import Resolution, ResolutionKind
 from src.data_sources.failures import GatherFailure
 from src.data_sources.sources import EvidenceBundle, TaggedDocument
 from src.data_sources.web_gather import WebSection
-from src.llm.json_parsing import json_object
+from src.llm.json_parsing import json_payload
 from src.llm.router import AllProvidersFailedError, LLMRouter, LLMTier
 from src.report import prompts
 from src.report.citations import build_citations, validate_markers
@@ -308,12 +308,12 @@ class ReportSynthesizer:
             warnings.append(f"section call failed: {type(exc).__name__}")
             return _PROSE_FAILED, []
 
-        payload = json_object(response.text)
+        payload = json_payload(response.text)
         if payload is None:
             warnings.append("no JSON object in the response")
             return _PROSE_FAILED, []
         try:
-            parsed = prompts.SectionProse.model_validate_json(payload)
+            parsed = prompts.SectionProse.model_validate(payload)
         except ValidationError as exc:
             warnings.append(f"unusable JSON ({exc.error_count()} error(s))")
             return _PROSE_FAILED, []

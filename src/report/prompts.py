@@ -32,12 +32,29 @@ from src.data_sources.web_gather import WebSection
 from src.report.citations import SectionCitations
 from src.report.confidence import ConfidenceAssessment
 
-#: Per-section output cap. Small on purpose. Three modest calls survive the
-#: fallback's tighter effective budget far better than one large call — Phase 3
-#: measured Gemini 2.5 spending 602 tokens on internal reasoning against 15
-#: visible before `thinking_budget=0` was set, and a fallback's job is to hold
-#: the report's shape, not to reason harder than the model it stands in for.
-MAX_SECTION_TOKENS = 2_000
+#: Per-section output cap.
+#:
+#: **This was 2,000 and it broke the primary, not the fallback.** The number was
+#: chosen to protect Gemini, on Phase 3's measurement that a 2.5-generation model
+#: spends `max_output_tokens` on internal reasoning before emitting visible text
+#: (602 thinking against 15 visible at a 2,000 cap). What that reasoning missed:
+#: `max_tokens` on the Anthropic side is a cap on thinking *plus* response text,
+#: and **Sonnet 5 runs adaptive thinking by default when the `thinking`
+#: parameter is omitted** — unlike the generation before it, where omitting the
+#: parameter meant no thinking at all. So the cap sized to protect the fallback
+#: starved the primary instead.
+#:
+#: Measured in the Phase 5 live pass, same prompt, same 41-claim section: at
+#: 2,000 the response was cut off mid-JSON after 1,327 characters and never
+#: closed its brace, so `json_object` returned None and all three sections
+#: degraded to the honest "synthesis did not complete" placeholder. At 6,000 the
+#: same call returned 4,502 characters of complete, parseable JSON. Gemini —
+#: with thinking off — succeeded at 2,000 and wrote the whole report while
+#: Claude wrote none of it.
+#:
+#: Three per-section calls rather than one whole-report call still stands, and
+#: still bounds the truncation exposure. Only the number moved.
+MAX_SECTION_TOKENS = 6_000
 
 SYSTEM = (
     "You write sections of a UK commercial underwriting report. You are given a "
