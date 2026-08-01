@@ -19,6 +19,7 @@ from dataclasses import dataclass
 from typing import Protocol
 
 from src.agent.claims import ExtractionResult
+from src.agent.extract import ClaimExtractor
 from src.data_sources.companies_house import CompaniesHouseClient
 from src.data_sources.sources import EvidenceBundle
 from src.data_sources.tavily import TavilyClient
@@ -91,11 +92,17 @@ class AgentDependencies:
         extractor: Extractor | None = None,
         synthesizer: Synthesizer | None = None,
     ) -> AgentDependencies:
+        # Built before the extractor, which needs it. Phase 4 replaced the
+        # placeholder extractor with the real one; `_NotYetExtracting` is kept
+        # because the graph tests still use it to exercise the no-claims path
+        # deterministically, and because `extraction_is_placeholder` remains the
+        # honest thing for the decision log to say when it is in use.
+        resolved_router = router or get_router()
         return cls(
             companies_house=companies_house or CompaniesHouseClient(),
             tavily=tavily or TavilyClient(),
-            router=router or get_router(),
-            extractor=extractor or _NotYetExtracting(),
+            router=resolved_router,
+            extractor=extractor or ClaimExtractor(resolved_router),
             synthesizer=synthesizer or _NotYetSynthesizing(),
         )
 
