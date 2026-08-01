@@ -63,7 +63,15 @@ class Settings(BaseSettings):
     # --- LLM routing (TECH_STACK.md: Haiku extraction, Sonnet synthesis only) ---
     extraction_model: str = "claude-haiku-4-5"
     synthesis_model: str = "claude-sonnet-5"
-    fallback_model: str = "gemini-2.0-flash"
+    # Was gemini-2.0-flash, per the original TECH_STACK lock. Changed in Phase 3
+    # after a live check: the entire 2.0 family (flash, flash-001, flash-lite,
+    # flash-lite-001) returns 429 RESOURCE_EXHAUSTED on our key, while 2.5-flash
+    # succeeds on that same key — so this is quota, not credentials. Left as-is,
+    # the fallback could never succeed and the circuit breaker would be a no-op
+    # that turns any Anthropic outage into total failure. Deviation logged in
+    # workflows.md. Pinned, not `gemini-flash-latest`: a floating alias could
+    # change model behaviour mid-review-window.
+    fallback_model: str = "gemini-2.5-flash"
     max_output_tokens: int = 16_000
 
     # --- Circuit breaker (Phase 0.6) ---

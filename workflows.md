@@ -136,6 +136,77 @@ None of this changed any of the mock's three confidence bands — verified, not 
 
 **What Phase 1 inherits:** `LLMRouter` for every model call; `Settings` for the Companies House key; the gated `/report` stub to build the real endpoint behind; and CI that fails on an unmocked live API call.
 
+## Addendum — Deployment Skeleton and Two Findings It Produced (Phase 3, parallel task)
+
+The Cloud Run deployment was pulled forward from Phase 6 and stood up early, to
+avoid meeting auth/env/container problems with a day left. The service runs the
+unchanged Phase 0.5 app — `/health` open, `/report` token-gated and 501 — at
+`https://groundwork-213351312105.europe-west2.run.app`, in a **dedicated GCP
+project**, deliberately not the developer's existing one, so the five API keys
+and this service share nothing with unrelated work. Secrets come from Secret
+Manager via a least-privilege runtime service account; nothing is baked into the
+image. Pulling it forward was worth it on its own: two build-context traps
+(`gcloud` ignores `.dockerignore`; a wrong `--source` path silently falls back
+to Buildpacks) cost minutes here that would have cost hours on submission day.
+
+Two substantive findings came out of it, both fixed.
+
+**1. Presence was being mistaken for usability in `Settings` (fixed).** The
+config check verified each credential was present, which a copied `.env.example`
+passes trivially. Three of five keys were still `REPLACE_ME_*` when the skeleton
+deployed: the build succeeded, `/health` returned 200, and the service could not
+have served a single report. That is precisely the failure `src/config.py` was
+written to prevent — a missing key fails loudly at startup, whereas a placeholder
+key starts cleanly and then fails on every outbound call, surfacing as *a report
+with no evidence in it*, indistinguishable from an honest report about a thinly
+documented company. The guard existed one layer too high. `Settings` now rejects
+placeholder values, `REPLACE_ME`/`your-` prefixes, present-but-empty strings, and
+`local-dev-*` demo tokens. `test-*` credentials stay accepted on purpose —
+`conftest.py` sets them because no unit test may reach a live API — and that
+boundary is pinned by its own test so nobody widens the rule and breaks the suite.
+
+Worth stating plainly for the design note: **the test suite could not have caught
+this.** Every external call is mocked by design, so a credential that is present
+but useless is invisible to it. It took one real deployment.
+
+**2. Deviation from the locked stack: fallback model `gemini-2.0-flash` →
+`gemini-2.5-flash`, thinking disabled.**
+
+*Decision:* change the fallback model and set `thinking_budget=0` on the Gemini
+provider.
+
+*Why:* a live check found the **entire 2.0 family** — `gemini-2.0-flash`,
+`-flash-001`, `-flash-lite`, `-flash-lite-001` — returning `429
+RESOURCE_EXHAUSTED`, while `gemini-2.5-flash` succeeded **on the same key**. So
+this is free-tier quota having moved off that generation, not a credential
+problem. Left unchanged, the fallback could never succeed: an Anthropic outage
+would trip the breaker, route to Gemini, fail, and raise
+`AllProvidersFailedError`. The provider-fallback circuit breaker — a headline
+resilience claim — would have been a no-op that converts a survivable outage
+into total failure, and Phase 5.7 could not have run at all.
+
+*Why thinking is disabled:* 2.5-generation models spend `max_output_tokens` on
+internal reasoning before emitting visible text. Measured: a one-sentence answer
+capped at 2,000 tokens spent 602 thinking against 15 visible; at a 200-token cap
+it truncated mid-sentence (190 thinking, 6 visible). The same cap therefore buys
+the fallback far less report than it buys the primary — a truncation asymmetry
+sitting exactly where Phase 5.7 must demonstrate the two providers produce
+structurally equivalent output. A fallback's job is to hold the report's shape
+when the primary is unreachable, not to reason harder than the model it stands
+in for. With thinking off, the same prompt returns a complete sentence at a
+200-token cap and reports zero thinking tokens.
+
+*Alternatives rejected:* keeping 2.0 and accepting a dead fallback (invalidates a
+graded claim about resilience); switching to a second paid provider (already
+rejected in `TECH_STACK.md` on cost grounds, and the reasoning still holds);
+using the `gemini-flash-latest` alias (a floating alias can change model
+behaviour mid-review-window — a pinned version is the right call for something
+being evaluated over an unknown period).
+
+*Scope of the change:* the locked **tool** is unchanged — Gemini, free tier,
+auto-switched via the circuit breaker. Only the model generation moves, and it
+was forced by an external fact rather than chosen. `TECH_STACK.md` updated.
+
 ## Non-Negotiables Carried Over From Earlier Instructions
 
 - Every claim in the final report must be traceable to a source — this must be a structural property of the data model (per `TASKS.md` Phase 4.1's `EvidenceClaim` schema), not something enforced only by prompting.

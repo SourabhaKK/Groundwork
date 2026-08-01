@@ -84,6 +84,19 @@ class GeminiProvider:
         config = genai_types.GenerateContentConfig(
             max_output_tokens=max_tokens,
             system_instruction=system,
+            # Thinking off. 2.5-generation models spend `max_output_tokens` on
+            # internal reasoning before emitting any visible text — measured at
+            # 602 thinking tokens against 15 visible ones for a one-sentence
+            # answer capped at 2,000. The same cap therefore buys the fallback
+            # far less report than it buys the primary, which is a truncation
+            # asymmetry sitting exactly where Phase 5.7 has to demonstrate the
+            # two providers produce structurally equivalent output.
+            #
+            # This is a fallback: its job is to keep the report the same shape
+            # when Anthropic is unreachable, not to reason harder than the model
+            # it stands in for. Cheaper and faster is a side benefit, not the
+            # reason.
+            thinking_config=genai_types.ThinkingConfig(thinking_budget=0),
         )
         response = await self._client.aio.models.generate_content(
             model=model, contents=prompt, config=config
