@@ -17,7 +17,7 @@ Phase-level tracker. Tick a phase only once every sub-phase under it is ticked *
 - [x] **Phase 1** — Company Resolution & Disambiguation — *complete; validated against the live register 31 Jul 2026*
 - [x] **Phase 2** — Data Gathering Layer — *core complete 31 Jul 2026; 2.5 deferred by design*
 - [x] **Phase 3** — Agent Orchestration (LangGraph) — *complete 1 Aug 2026; 3.5 simplified to a single bounded re-search pass, 4.1 pulled forward as its prerequisite*
-- [ ] **Phase 4** — Structured Extraction — *code complete 1 Aug 2026 on `phase-4-extraction`; awaiting sign-off, and one open correctness risk (register filing-history over-fragmentation) recorded in `BUILD_LOG.md` Phase 4*
+- [x] **Phase 4** — Structured Extraction — *complete 1 Aug 2026, signed off and merged; two limitations disclosed in README §5 rather than fixed — conflict-severity misreads and register filing-history over-fragmentation, the latter needing a Phase 2 rendering decision. See `BUILD_LOG.md` Phase 4.*
 - [ ] **Phase 5** — Report Synthesis & Uncertainty Handling
 - [ ] **Phase 6** — API, Frontend, Deployment
 - [ ] **Phase 7** — Testing, Design Note, Audit
