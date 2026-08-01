@@ -68,6 +68,76 @@ def test_a_complete_environment_validates() -> None:
     assert _settings_ignoring_dotenv().companies_house_api_key == "test-ch-key"
 
 
+@pytest.mark.parametrize(
+    ("key", "placeholder"),
+    [
+        # Verbatim from .env.example — the copied-the-example case.
+        ("COMPANIES_HOUSE_API_KEY", "your-companies-house-key"),
+        ("TAVILY_API_KEY", "tvly-your-key"),
+        ("ANTHROPIC_API_KEY", "sk-ant-your-key"),
+        ("GOOGLE_API_KEY", "your-google-ai-studio-key"),
+        ("DEMO_ACCESS_TOKEN", "generate-a-long-random-string"),
+        # The shape actually found in the working .env during Phase 3, which
+        # deployed to Cloud Run green and could not have served a single report.
+        ("ANTHROPIC_API_KEY", "REPLACE_ME_WITH_ANTHROPIC_KEY"),
+        ("COMPANIES_HOUSE_API_KEY", "REPLACE_ME_WITH_LIVE_COMPANIES_HOUSE_KEY"),
+        ("GOOGLE_API_KEY", "REPLACE_ME_WITH_GOOGLE_AI_STUDIO_KEY"),
+        # Present-but-empty passes a bare `str` annotation, and would otherwise
+        # reach the provider as an empty Authorization header.
+        ("TAVILY_API_KEY", ""),
+        ("ANTHROPIC_API_KEY", "   "),
+    ],
+)
+def test_a_placeholder_credential_is_rejected_like_a_missing_one(
+    key: str, placeholder: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Presence is not usability.
+
+    A missing key fails at startup; a placeholder key starts cleanly and fails
+    on every outbound call, surfacing as a report with no evidence — which is
+    indistinguishable from an honest report about a thin company. That is the
+    one failure mode this project treats as unacceptable, so the two cases have
+    to behave identically.
+    """
+    monkeypatch.setenv(key, placeholder)
+    get_settings.cache_clear()
+
+    with pytest.raises(ValidationError) as raised:
+        _settings_ignoring_dotenv()
+
+    assert key.lower() in str(raised.value)
+
+
+@pytest.mark.parametrize("token", ["local-dev-token-abc123", "dev-token-xyz", "local-whatever"])
+def test_a_development_demo_token_is_rejected(
+    token: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Separate from the placeholder rule because such a token genuinely works —
+    it is simply not the one that should gate a public URL running on a personal
+    API key, and nothing downstream would ever flag it."""
+    monkeypatch.setenv("DEMO_ACCESS_TOKEN", token)
+    get_settings.cache_clear()
+
+    with pytest.raises(ValidationError) as raised:
+        _settings_ignoring_dotenv()
+
+    assert "demo_access_token" in str(raised.value)
+
+
+def test_test_fixture_credentials_are_not_rejected() -> None:
+    """The guard against over-reach.
+
+    `conftest.py` sets `test-*` credentials deliberately, because no unit test
+    in this project may reach a live API. If the placeholder rule grew to catch
+    those, the suite would fail for doing exactly the right thing — so the
+    boundary is pinned here rather than left to be rediscovered.
+    """
+    settings = _settings_ignoring_dotenv()
+
+    assert settings.anthropic_api_key == "test-anthropic-key"
+    assert settings.tavily_api_key == "test-tavily-key"
+
+
 def test_startup_consults_the_configuration(monkeypatch: pytest.MonkeyPatch) -> None:
     """That `lifespan` actually calls `get_settings()` — the wiring, not the
     validation. If the call were removed, config errors would surface mid-run

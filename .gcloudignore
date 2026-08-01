@@ -1,0 +1,34 @@
+# What gets uploaded to Cloud Build by `gcloud run deploy --source`.
+#
+# gcloud does NOT read .dockerignore — without this file it falls back to
+# .gitignore, which is close but not identical, and the difference here is
+# secrets. Kept explicit rather than inherited.
+#
+# Note the absence of a `.gitignore`-style negation for the Dockerfile: it must
+# stay in the context or the build silently falls back to Buildpacks.
+.env
+.env.*
+!.env.example
+
+.git/
+.gitignore
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+htmlcov/
+.coverage
+
+tests/
+docs/
+frontend/
+
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

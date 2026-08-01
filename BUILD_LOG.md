@@ -159,3 +159,113 @@ Every URL in the new tests is one the live API actually returned, so they are re
 6. **2.5 is deferred, not forgotten, and the data is already there.** PSC records and full filing history are gathered, tagged and in the bundle today. What is deferred is the *analysis* — SIC-code changes over time, officer turnover rate, filing punctuality. If it is not built after Phase 7, it goes in the design note's deferred section, per TASKS.md.
 
 ---
+
+## Phase 3 — Agent Orchestration (LangGraph)
+
+**Built:** a LangGraph state machine over the Phase 1 and 2 functions —
+`resolve → (gather_registry ∥ gather_web) → assemble_evidence → extract →
+evaluate_sufficiency → [research_gap → extract → evaluate] → synthesize`, with a
+`halt` terminal for every non-report outcome. Plus `score_confidence()` (Phase
+5.4) and `EvidenceClaim` (Phase 4.1), both pulled forward because 3.5 cannot be
+wired or tested without them.
+
+**The scope change, stated plainly for the design note.** 3.5 was specified as an
+adaptive re-search loop and was simplified, under a 2-day remaining timeline, to
+a **single bounded pass**: one retry per under-evidenced section, not iterative
+refinement. The three properties that make it genuine agentic branching rather
+than a retry were kept, and each has a test:
+
+1. **It fires only on a measured judgement.** The trigger is
+   `score_confidence()` — literally the same function the report publishes its
+   bands from, not a parallel heuristic that could drift. A section re-searches
+   only when it scores LOW *for a reason more evidence could fix*.
+2. **The refined query is demonstrably different and gap-targeted.** Generated
+   by Haiku from the section, the original query, the URLs already retrieved and
+   the specific gap, then validated mechanically before a credit is spent —
+   rejected if it drops the company's distinctive name tokens, exceeds the
+   length cap, or overlaps the original above a token-similarity threshold.
+3. **The decision is logged either way.** Every section gets a
+   `SufficiencyEvaluated` entry every run, carrying the band, the reason, the
+   claim count, and whether a re-search fired *and if not, why not*. A log that
+   recorded only the times the agent acted could not be audited for judgement.
+
+**Three design choices worth being able to defend:**
+
+- **Parallel gather is two real graph nodes, not one node calling
+  `asyncio.gather`.** Identical wall-clock. The difference is that the
+  parallelism and the per-source failure branch are visible in the graph, and
+  the graph is a deliverable.
+- **`evaluate → research_gap → extract → evaluate` is a genuine cycle**, exited
+  because a counter on the state says so, not because the edge back is missing.
+  `recursion_limit` is a backstop for a counter bug, not the bound.
+- **A contradicted section is not re-searched.** `ConfidenceReason` distinguishes
+  "thin" from "contradicted" — both are LOW, only one is worth a credit. Phase
+  4.3 requires conflicts to surface rather than be resolved, so spending a
+  search trying to out-vote one would work against it. Honest tradeoff: more
+  evidence would sometimes adjudicate a conflict, and this declines to try.
+
+**The live pass, and the assumption it broke.** One live run against real Monzo
+data, aimed at the phase's highest-risk assumption: that the model produces a
+genuinely gap-targeted query rather than a paraphrase.
+
+*What held.* The refinement was better than expected. Against a reputation
+section whose first pass returned Trustpilot, a review blog and a Monzo
+community thread, Haiku produced *"Monzo Bank Limited FCA complaints data UK
+Financial Ombudsman Service outcomes"* — token overlap 0.19 with the original,
+explicitly reasoning that it targeted "official regulatory and ombudsman records
+rather than consumer review platforms". The guardrail never had to fire.
+
+*What broke — and it was not the LLM.* That excellent query, run at **basic**
+depth, returned Wikipedia, `monzo.com`, and two app-store listings. The same
+query at **advanced** depth returned the FCA's firm-level complaints table, the
+FCA Final Notice imposing a £21m fine, a Financial Ombudsman decision PDF, and
+ombudsman data on wrongly-rejected fraud refunds — five results, **none** of
+which basic found.
+
+The re-search had been specified at basic depth on the reasoning that a gap is a
+coverage problem, so breadth beats depth. That reasoning was wrong, and Phase
+2.2 had already recorded why: for competitive landscape and reputation, the top
+hits are aggregator homepages whose basic snippet is generic boilerplate, and
+depth is what returns the actual text. That does not stop being true because it
+is the second search rather than the first. **A re-search now inherits its
+section's first-pass depth** — a re-search cannot be cheaper than the pass it is
+trying to rescue.
+
+Worth noting what this nearly cost: the feature would have shipped looking
+correct. The branch fired, the query was good, the log was honest, new URLs came
+back. Only reading *which* URLs showed the retrieved evidence was useless for
+the gap it was aimed at. A mocked test cannot catch that, and neither can a test
+that asserts "the re-search returned new documents".
+
+**Budget consequence, and a deviation from Phase 2's recorded figure.** Phase 2
+scoped re-search at one basic search per report — 6 credits worst case. It is
+now one per under-evidenced section, at that section's own depth, so the worst
+case is the baseline twice over: 5 + 5 = 10. Typical stays 5-7, since all three
+sections are rarely thin at once, but a cap sizes on the worst case.
+`global_report_budget` therefore moves 130 → **80** (800 serve credits ÷ 10).
+
+**Deferred, with reasons:** extraction (4.2) and synthesis (5.1-5.3) are
+injected dependencies with deliberate placeholders — the placeholder extractor
+returns *nothing* rather than plausible claims, so every section honestly scores
+LOW/NO_CLAIMS while Phase 4 is outstanding. Inventing claims to make the graph
+look healthier would put a fabrication inside the one pipeline whose entire
+purpose is grounding.
+
+**Carried forward — what Phase 4 needs to know:**
+
+1. **Implement `Extractor`**, not a new call site. `AgentDependencies.extractor`
+   is the seam; the graph does not change. On the second pass it is called with
+   only the re-searched sections, so it must not assume all three.
+2. **`merge_claims` dedupes on a content hash of `source_url + text`.** An
+   extractor that rephrases the same fact on a second pass will create a
+   duplicate claim and inflate a section's count — which moves a band with no
+   new evidence.
+3. **`counts_toward_confidence=False` is the mechanism for `entity_warning`.**
+   4.2 must either refuse claims from a warned document or mark them non-scoring
+   with the mismatch stated in the claim text.
+4. **The claim-granularity rule is a convention the type system cannot enforce.**
+   Every count-based condition in `score_confidence` inherits it.
+5. **190 → ~182 search credits** remain of the development reserve (6 spent on
+   the live 3.5 run, 2 on the depth comparison).
+
+---

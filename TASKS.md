@@ -16,7 +16,7 @@ Phase-level tracker. Tick a phase only once every sub-phase under it is ticked *
 - [x] **Phase 0** — Project Setup & Core Infrastructure — *complete; 0.7 mock signed off 30 Jul 2026*
 - [x] **Phase 1** — Company Resolution & Disambiguation — *complete; validated against the live register 31 Jul 2026*
 - [x] **Phase 2** — Data Gathering Layer — *core complete 31 Jul 2026; 2.5 deferred by design*
-- [ ] **Phase 3** — Agent Orchestration (LangGraph)
+- [x] **Phase 3** — Agent Orchestration (LangGraph) — *complete 1 Aug 2026; 3.5 simplified to a single bounded re-search pass, 4.1 pulled forward as its prerequisite*
 - [ ] **Phase 4** — Structured Extraction
 - [ ] **Phase 5** — Report Synthesis & Uncertainty Handling
 - [ ] **Phase 6** — API, Frontend, Deployment
@@ -61,14 +61,18 @@ Phase-level tracker. Tick a phase only once every sub-phase under it is ticked *
 
 **Implementation-order note:** Phase 3.5 (below) depends on Phase 4's `EvidenceClaim` extraction schema existing to evaluate sufficiency. Build Phase 4.1 (the schema) before wiring 3.5's conditional edge — the phases are still presented in this order because 3.1–3.4 (graph skeleton, stopping condition, fallback routing, logging) don't have that dependency and should be built first.
 
-- [ ] 3.1 Define the state graph: nodes for resolve → gather (parallel branches per source) → extract → **evaluate sufficiency → (conditional) re-search or proceed** → synthesize → uncertainty-check → render
-- [ ] 3.2 Explicit stopping condition for the gather phase (max tool calls / diminishing-returns heuristic — must be a real, statable rule, not "until it feels done"). This cap also bounds the re-search loop in 3.5 — the agent cannot re-search indefinitely.
-- [ ] 3.3 Failure/fallback routing — calls through the Phase 0.6 circuit breaker, plus source-unavailable handling
-- [ ] 3.4 Logging of every agent decision (which tool was called, why, what it returned, and — for 3.5 — why a re-search was or wasn't triggered) — this log is what makes Phase 3 auditable for the "Agent design" grading criterion
-- [ ] 3.5 **Adaptive re-search loop — the genuine agentic decision point, added to close a Round 1 council finding that was raised but never actioned in Rounds 1–3.** After initial extraction (Phase 4) runs against the first gather pass, evaluate per-section claim sufficiency using the same claim-count logic as Phase 5.4's confidence rule. If a section has fewer claims than the MEDIUM threshold (i.e. it would currently score LOW) **and** the Phase 3.2 tool-call budget isn't exhausted, the graph conditionally routes back to a targeted follow-up gather step with a refined query (e.g. narrower to that specific section's gap) rather than proceeding straight to synthesis. This is implemented as a LangGraph conditional edge keyed on runtime extraction state — this is what actually distinguishes an agent from a fixed pipeline: the control flow itself depends on what was found, not just on which step comes next in a predetermined order.
+- [x] 3.1 Define the state graph: nodes for resolve → gather (parallel branches per source) → extract → **evaluate sufficiency → (conditional) re-search or proceed** → synthesize → uncertainty-check → render
+- [x] 3.2 Explicit stopping condition for the gather phase (max tool calls / diminishing-returns heuristic — must be a real, statable rule, not "until it feels done"). This cap also bounds the re-search loop in 3.5 — the agent cannot re-search indefinitely.
+- [x] 3.3 Failure/fallback routing — calls through the Phase 0.6 circuit breaker, plus source-unavailable handling
+- [x] 3.4 Logging of every agent decision (which tool was called, why, what it returned, and — for 3.5 — why a re-search was or wasn't triggered) — this log is what makes Phase 3 auditable for the "Agent design" grading criterion
+- [x] 3.5 **Adaptive re-search loop — scope simplified to a single bounded pass (one retry per under-evidenced section, not iterative refinement) under the 2-day timeline; the three non-negotiables below are all met. See `BUILD_LOG.md` Phase 3.** Original text follows.
+
+  **Adaptive re-search loop — the genuine agentic decision point, added to close a Round 1 council finding that was raised but never actioned in Rounds 1–3.** After initial extraction (Phase 4) runs against the first gather pass, evaluate per-section claim sufficiency using the same claim-count logic as Phase 5.4's confidence rule. If a section has fewer claims than the MEDIUM threshold (i.e. it would currently score LOW) **and** the Phase 3.2 tool-call budget isn't exhausted, the graph conditionally routes back to a targeted follow-up gather step with a refined query (e.g. narrower to that specific section's gap) rather than proceeding straight to synthesis. This is implemented as a LangGraph conditional edge keyed on runtime extraction state — this is what actually distinguishes an agent from a fixed pipeline: the control flow itself depends on what was found, not just on which step comes next in a predetermined order.
 
 ## Phase 4 — Structured Extraction
-- [ ] 4.1 Pydantic schemas: `EvidenceClaim` (text, source_url, source_type, confidence, **`counts_toward_confidence: bool = True`**), per-section schemas.
+- [x] 4.1 Pydantic schemas — **built in Phase 3**, per the implementation-order note above: 3.5's conditional edge cannot be wired or tested without the schema it evaluates. `src/agent/claims.py`; the granularity rule is stated on `EvidenceClaim` itself. Original text follows.
+
+  Pydantic schemas: `EvidenceClaim` (text, source_url, source_type, confidence, **`counts_toward_confidence: bool = True`**), per-section schemas.
 
   Set `counts_toward_confidence = False` when a claim is retrieved and worth surfacing in the report's prose (e.g. as a caveated evidence gap) but is not reliable enough to count toward that section's confidence score — e.g. a single secondary source with no independent corroboration, or a claim substituted from an aggregator because the primary source returned an access error. **The full claim list — including excluded claims — still renders in the report's prose and evidence-gap notes; only the Phase 5.4 scoring math excludes them.** Found by building the Phase 0.7 mock, whose Section 2 manually excluded a secondary estimate from its scored claims while still discussing it in prose — the right instinct, but one a human made by hand. The pipeline needs it as a schema field, not an implicit judgment call reinvented every run.
 
