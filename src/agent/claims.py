@@ -117,8 +117,20 @@ class EvidenceClaim(BaseModel):
         duplicate every claim from round one — silently inflating claim counts,
         which is precisely what moves a confidence band without new evidence.
         A random id would also make every test assertion order-dependent.
+
+        **`section` is part of the identity (added in Phase 4).** It was not, and
+        that was a real bug rather than a refinement. Phase 2's live trial
+        recorded that Wikipedia came back in *two* sections — the same URL
+        gathered twice, as two `TaggedDocument`s differing only in `section`.
+        Hashing url+text alone made both extract to one claim, which
+        `merge_claims` then deduplicated: the second section silently lost a
+        claim it had genuinely gathered evidence for. Phase 5.4 counts per
+        section, so that is a band moving on a hash collision.
+
+        Second-pass idempotence is unaffected — a re-extracted document has the
+        same section as it did the first time, so it still collapses.
         """
-        digest = hashlib.sha256(f"{self.source_url}\n{self.text}".encode())
+        digest = hashlib.sha256(f"{self.source_url}\n{self.section.value}\n{self.text}".encode())
         return digest.hexdigest()[:12]
 
 
@@ -157,6 +169,10 @@ def merge_claims(
     legitimately be returned again by the follow-up query. Without this, round
     two would double-count round one's claims and lift a section's band on
     evidence it already had — the exact way a re-search could flatter itself.
+
+    Identity is per *section*, not per URL — see `EvidenceClaim.id`. The same
+    fact supporting two sections is two claims, because the confidence rule
+    scores each section on the evidence gathered for it.
     """
     merged = list(existing)
     seen = {claim.id for claim in existing}
