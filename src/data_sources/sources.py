@@ -192,7 +192,13 @@ _UGC_PATH_MARKERS = ("/community", "/forum", "/forums", "/discussions", "/t/")
 
 # Name tokens too generic to identify a company by. Without this, a company
 # called "The Bank Group" would claim bank.com as its own site.
-_GENERIC_NAME_TOKENS = frozenset(
+#
+# Public because Phase 3.5 needs the same judgement for a different purpose: a
+# refined search query must still name the company, and "Monzo Bank" must be
+# satisfied by a query saying "Monzo" while "UK bank complaints" must not count
+# as naming it. That is this same distinction, so it is this same list rather
+# than a second one that could drift out of step.
+GENERIC_NAME_TOKENS = frozenset(
     {
         "the",
         "uk",
@@ -211,6 +217,22 @@ _GENERIC_NAME_TOKENS = frozenset(
         "finance",
     }
 )
+
+
+def distinctive_tokens(name: str) -> frozenset[str]:
+    """The tokens of a company name that actually identify *this* company.
+
+    "Monzo Bank" reduces to {"monzo"}; "UK bank" reduces to nothing, which is
+    the honest answer — those words identify no one.
+
+    Returns every token when they are *all* generic (e.g. "The Bank Group"),
+    because the alternative is returning an empty set that any string would
+    trivially satisfy. Being over-strict on a company with no distinctive name
+    is the safe direction; being trivially satisfiable is not.
+    """
+    tokens = frozenset(re.findall(r"[a-z0-9]+", (name or "").lower()))
+    distinctive = tokens - GENERIC_NAME_TOKENS
+    return distinctive or tokens
 
 
 def _hostname(url: str) -> str:
@@ -269,7 +291,7 @@ def is_company_own_domain(host: str, profile: CompanyProfile) -> bool:
     # shorten "MONZO BANK LIMITED" to "Monzo". A generic one is not, or every
     # company with "Group" in its name would claim group.com.
     first = tokens[0]
-    return label == first and first not in _GENERIC_NAME_TOKENS and len(first) >= 4
+    return label == first and first not in GENERIC_NAME_TOKENS and len(first) >= 4
 
 
 def is_user_generated(url: str) -> bool:
@@ -363,7 +385,7 @@ def names_a_different_entity(text: str, profile: CompanyProfile) -> str | None:
 
     first = tokens[0]
     candidates = {" ".join(tokens)}
-    if first not in _GENERIC_NAME_TOKENS and len(first) >= 4:
+    if first not in GENERIC_NAME_TOKENS and len(first) >= 4:
         candidates.add(first)
 
     for candidate in candidates:

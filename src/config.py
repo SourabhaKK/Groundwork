@@ -92,12 +92,27 @@ class Settings(BaseSettings):
     # Phase 0 set this to 200 assuming ~3 credits per report (three basic
     # searches). Phase 2.2 costs a report at 5 credits — one basic search for
     # business model, two advanced for competitive landscape and reputation,
-    # where deeper retrieval genuinely changes what comes back — plus up to 1
-    # more for Phase 3.5's re-search, so 6 in the worst case. Reserving 200
-    # credits for development and Phase 7.1 manual runs (which bypass this gate
-    # entirely) leaves 800 to serve from: 800 / 6 = 133.
+    # where deeper retrieval genuinely changes what comes back.
+    #
+    # Phase 3.5 adds one re-search **per under-evidenced section**, at that
+    # section's own depth. Per-section is the right unit because confidence is
+    # scored per section: re-searching only one of three thin sections would
+    # leave the other two reporting LOW with budget still unspent.
+    #
+    # A live Phase 3 trial forced the depth half of that: a re-search at basic
+    # depth returned Wikipedia and app-store listings for a query aimed at the
+    # FCA and the Financial Ombudsman, while the same query at advanced depth
+    # returned the regulator's complaints table, its final notice and an
+    # ombudsman decision. A re-search therefore cannot be cheaper than the pass
+    # it is rescuing, so the worst case is the baseline twice over: 5 + 5 = 10.
+    #
+    # Typical cost stays 5-7 — it is rare for all three sections to be thin at
+    # once — but a cap has to be sized on the worst case, not the common one.
+    #
+    # Reserving 200 credits for development and Phase 7.1 manual runs (which
+    # bypass this gate entirely) leaves 800 to serve from: 800 / 10 = 80.
     per_ip_reports_per_hour: int = 5
-    global_report_budget: int = 130
+    global_report_budget: int = 80
 
     @field_validator(
         "companies_house_api_key",

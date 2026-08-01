@@ -207,6 +207,39 @@ being evaluated over an unknown period).
 auto-switched via the circuit breaker. Only the model generation moves, and it
 was forced by an external fact rather than chosen. `TECH_STACK.md` updated.
 
+## Addendum — Phase 3 Deviations
+
+1. **Process change (timeline).** With two days to submission the per-sub-phase
+   decision cycle was compressed by agreement: one consolidated proposal per
+   phase covering all its sub-tasks, escalating mid-phase only for genuinely
+   novel decisions or real correctness risks, and one live-testing pass per
+   phase aimed at that phase's single highest-risk assumption. The Core Rule is
+   not suspended — decisions are still stated, reasoned and recorded — it is
+   batched. No further council audit rounds on any planning document.
+
+2. **Phase 3.5 scope reduced** from an adaptive re-search *loop* to a single
+   bounded pass (one retry per under-evidenced section, no iterative
+   refinement). The three properties that make it agentic rather than a retry
+   were retained and each is tested; see `BUILD_LOG.md` Phase 3.
+
+3. **Phase 4.1 built during Phase 3**, per TASKS.md's own implementation-order
+   note: 3.5 evaluates claim sufficiency, so the claim schema had to exist
+   first. The extraction *prompts* (4.2) remain Phase 4 work.
+
+4. **`global_report_budget` 130 → 80.** Two compounding changes, both recorded
+   in the build log: re-search became per-section rather than per-report, and a
+   live trial showed a re-search must run at its section's own depth rather than
+   basic (basic returned Wikipedia and app-store pages for a query aimed at the
+   FCA; advanced returned the regulator's complaints table and an ombudsman
+   decision). Worst case per report is therefore the baseline twice over, 10
+   credits, and 800 serve credits ÷ 10 = 80.
+
+5. **`sources._GENERIC_NAME_TOKENS` made public** as `GENERIC_NAME_TOKENS`, with
+   a `distinctive_tokens()` helper. Phase 3.5 needs the same judgement for a
+   different purpose — a refined query naming "Monzo" must count as naming MONZO
+   BANK LIMITED, while "UK bank complaints" must not — and a second list would
+   drift out of step with the first.
+
 ## Non-Negotiables Carried Over From Earlier Instructions
 
 - Every claim in the final report must be traceable to a source — this must be a structural property of the data model (per `TASKS.md` Phase 4.1's `EvidenceClaim` schema), not something enforced only by prompting.
