@@ -1112,3 +1112,228 @@ where it should now outrank the filing-history rendering fix.
    begins honouring `schedule` once the workflow is on the default branch —
    so it does nothing until this branch merges. Worth a manual dispatch after
    the merge to confirm it goes green rather than assuming it.
+
+---
+
+## Phase 7 — Testing, Design Note, Audit
+
+**Status:** complete. 7.1, 7.1a, 7.2, 7.3 and 7.4 all done. Built on branch
+`phase-7-final`, cut from `main` at `bbd229e`.
+
+**Test status: 422 tests, all passing** (unchanged — this phase added no
+production code). `ruff check` and `ruff format --check` clean.
+
+**Built:** no source changes. `DESIGN_NOTE.md`,
+`docs/phase-7.1-run-results.md`, `docs/phase-7.3-self-audit.md`, and README
+corrections. Phase 7 was a validation-and-articulation phase, and the fact that
+it produced no production diff is itself worth recording: four correctness
+issues were found and all four were disclosed rather than patched, for the
+reasons given in each case below.
+
+**Note on Phase 6's entry:** it says "Not merged: awaiting sign-off". It merged
+as `bbd229e`. Recorded here rather than edited there, per this log's own rule.
+
+---
+
+### The four scenarios — 12 Tavily credits, ~154 to ~142
+
+Scenario selection was itself evidence-driven, which is worth keeping. A
+**zero-credit reconnaissance pass** resolved a dozen candidate queries against
+Companies House alone before any search credit was spent, so the thin-evidence
+and ambiguous-name companies were chosen on what the register actually returned
+rather than guessed at.
+
+| Scenario | Query | Outcome | Credits | Time |
+|---|---|---|---|---|
+| Well-documented | `Monzo Bank Ltd` | `complete` | 7 | 62.3s |
+| Thin evidence | `Ashgrove Bespoke Cabinetry` (16259703) | `complete` | 5 | 43.4s |
+| Ambiguous | `Sterling Services` | `needs_input`, 8 candidates | 0 | 0.2s |
+| Invalid | `!!!` | `invalid_input` | 0 | 0.0s |
+| Malformed | `12345678901234567890` | `not_found` | 0 | 0.0s |
+
+Full analysis in `docs/phase-7.1-run-results.md`. **The structural diff against
+the Phase 0.7 mock passes: 11 differences, none of them shape.** Section count,
+order, headings, badges, gaps blocks, sources tables, exclusion notes, the
+three-row working table and the absence of trailing content all match. The 11
+are band, one conflict block, and evidence volume — the mock working as
+specified, a floor on shape rather than a ceiling on quality.
+
+**7.1a: criteria 1, 2 and 4 pass; criterion 3 fails on the thin-evidence run**,
+via finding 1 below.
+
+---
+
+### Finding 1 — a fourth limitation: web evidence attributed to a same-named different company
+
+The thin-evidence company (ASHGROVE BESPOKE CABINETRY LTD, registered office
+Tonbridge, Kent) drew web evidence from at least three different UK businesses —
+a Glasgow cabinetmaker, a Devon joinery firm, and a site stating East Sussex —
+and extraction attributed all of them to the subject.
+
+**Zero entity warnings fired, and the reason is structural rather than a tuning
+miss.** `names_a_different_entity()` was built in Phase 2 after a Better
+Business Bureau page for *Monzo, Inc.* reached a UK report. It keys on the
+subject's distinctive name tokens, and every one of these sources shares
+"Ashgrove". Phase 2's other half — UK-anchoring every query — does not help when
+all three confusable entities genuinely are UK companies.
+
+**The property that makes it matter: the failure is correlated with thin
+evidence.** A well-documented company dominates its own search results; a
+micro-business with a generic name does not, so the ranking fills with
+same-named others. The mode bites hardest exactly where an underwriter most
+needs care.
+
+**What contained it, recorded because it is the honest half.** The report did
+not state the conflated facts confidently — it surfaced the contradiction,
+printed both locations, and said the evidence did not allow either to be
+confirmed. The uncertainty machinery bounded a grounding failure it was not
+designed to catch. That is reassuring about the architecture and is not a reason
+to leave the defect.
+
+**Disclosed, not fixed**, as an explicit decision. The fix — requiring identity
+corroboration before a web document may contribute *scoring* claims — is
+data-gathering-layer work, the same layer and the same pending decision the two
+filing-history limitations have been waiting on since Phase 4. Consistent with
+how every prior correctness-adjacent finding was handled under this timeline.
+README §5 now carries four limitations, not three.
+
+---
+
+### Finding 2 — the predicted filing-row exposure materialised, and was masked by finding 1
+
+Phase 4 predicted it exactly: *"nine filing rows alone clear HIGH's `>= 3` gate
+with an `official_registry` source present, so a business with no press coverage
+and no regulatory history could report HIGH confidence on the strength of having
+filed its accounts."*
+
+Ashgrove's business model section drew **11 scored `official_registry` claims**,
+almost all register enumeration. That clears the gate. **Under the rule, that
+section scores HIGH.** It reported LOW only because finding 1's contradictions
+tripped `major_conflict`, which is checked first.
+
+**Two defects cancelled.** Had the web search returned nothing — entirely
+plausible for a company this small — a 2025-incorporated joinery micro-business
+with no trading history would have reported HIGH confidence on its business
+model. This is the clearest example in the project of something that ships
+looking correct.
+
+Also observed, and previously predicted as unhandled: *"The company was
+incorporated on 18 February 2025"* appeared **twice** as two scored claims, from
+the profile and the filing-history documents. Different URLs, different ids, so
+`merge_claims` keeps both. Phase 4 flagged cross-document duplication as
+unhandled and said it would inflate a count if it ever reached scoring claims.
+It has now.
+
+---
+
+### Finding 3 — the conflict classifier emits self-refuting conflict records
+
+The sharpest result of this phase, and it **makes the recommended fix cheaper
+than Phase 4 estimated**.
+
+Monzo's business model is capped at MEDIUM by a MINOR conflict whose own detail
+text reads: *"These claims describe two separate foreign transaction charges (£5
+for card delivery and 3% for card usage abroad) **rather than conflicting with
+each other**, so they represent different fees rather than a genuine
+disagreement."*
+
+The classifier emitted a conflict record explaining, in the same field, why the
+two claims are not in conflict — and the band moved anyway. The thin run holds a
+second instance. `score_confidence()` reads only `severity`; `detail` is
+rendered to the reader and never inspected. **That self-refuting MINOR is the
+sole reason Monzo's business model scored MEDIUM rather than HIGH.**
+
+Phase 4 proposed the fix as a second classification pass required to state the
+basis of the disagreement, and rejected it as doubling classification cost on
+every report. This run shows **the model already volunteers the basis,
+unprompted, in a field that already exists**. The fix is therefore closer to
+making an existing signal load-bearing than to adding a pass — require the basis
+as a structured field, and let a declared basis mismatch downgrade or discard
+the conflict. Recorded as the design note's first "what would change with more
+time" item.
+
+**Further evidence against prompt-tuning as the fix:** the same $5.2bn-vs-$5bn
+valuation pair that Phase 6 classified MAJOR was classified **MINOR** this run.
+Same pattern, same prompt, different severity — the classification is not stable
+across runs.
+
+---
+
+### Finding 4 — the Phase 6 second-order effect reproduced independently
+
+Monzo's competitive landscape repeated Phase 6's sequence on different evidence:
+first pass LOW, the 3.5 branch fires correctly and re-searches at the section's
+own depth, 45 scored claims across 7 sources, and the section still finishes LOW
+— now on `major_conflict` (user counts of 10m vs 6.5m vs 9m; "largest
+digital-only bank" vs "7th largest UK bank", which are different dates and
+different denominators).
+
+**More evidence lowered the confidence, again.** Observed twice now, on two
+independent runs, one of them the deployed service. No longer an anecdote, and
+the design note leads its final section with it.
+
+---
+
+### Finding 5 — a README accuracy defect, found by running the scenario
+
+README §7 claimed *"`!!!` or a 20-digit number is rejected before any network
+call."* The second half is false. `_validate_query` rejects empty, over-length,
+non-alphanumeric and single-character input; a 20-digit number passes all four,
+fails the company-number pattern, and is searched as a name, returning
+`NOT_FOUND`. The outcome is honest, but it is not `INVALID` and it is not free
+of a network call. Corrected in 7.4. Worth recording as the class of error only
+a run finds — the behaviour was always correct, only the documentation was
+wrong.
+
+---
+
+### One extraction failure, logged
+
+The Monzo officers document returned `no JSON object in response` and
+contributed no claims to that run. Per-document isolation meant one bad response
+cost one document rather than the report, which is correct — but it is invisible
+in the output, the same criticism Phase 5 made of the strict-JSON bug.
+
+---
+
+### 7.4 — repo and history audit
+
+- **Secret history clean, checked against past commits rather than current
+  files.** `.env` was never tracked at any point in the 46-commit history; no
+  secret-shaped file was ever added; a content scan of every commit's diff for
+  Anthropic, Google, Tavily, GitHub and PEM private-key patterns returns
+  nothing. The only credential-shaped line ever committed is `.env.example`'s
+  `DEMO_ACCESS_TOKEN=generate-a-long-random-string` placeholder. CI carries no
+  secrets, and the keep-warm workflow deliberately hits the unauthenticated
+  `/health` so that it needs none.
+- **Commit history reads cleanly** — conventional commits, one phase per merge,
+  phase numbers in the messages.
+- **README:** the §7 defect corrected, the fourth limitation added to §5, a
+  design-note section added, and the closing document table rewritten for an
+  external reader.
+- **`AGENTS.md` / `CLAUDE.md` reworded.** Both were written in a live build-time
+  instruction voice ("wait for explicit confirmation before writing code",
+  "before starting Phase 0") that reads oddly to an evaluator opening the repo
+  after the fact. Rewritten as repo conventions plus a plain statement that
+  Claude Code was the implementation tool and what process governed it. The
+  disclosure is kept and made more direct rather than removed, and the hard
+  boundaries are unchanged.
+
+---
+
+**Carried forward — what a future session would need to know:**
+
+1. **Four limitations are disclosed in README §5**, and three of them wait on
+   the same decision: what the data-gathering layer renders into an evidence
+   document, and what it must verify before a document may contribute scoring
+   claims. Filing-history rendering, date labelling and web-entity corroboration
+   should be taken together.
+2. **The conflict-basis fix (finding 3) is the highest-value change in the
+   repo**, and it is cheaper than previously estimated, because the signal is
+   already present in `Conflict.detail` and merely unread.
+3. **`SectionRender.warnings` is still unsurfaced.** Carried since Phase 5.
+4. **~142 search credits** remain of the development reserve.
+5. **The deployed revision predates this branch.** Nothing in Phase 7 changed
+   `src/`, so the running service is functionally current; redeploy only if a
+   later change touches source, and confirm via `/health` that the new code is
+   serving.
