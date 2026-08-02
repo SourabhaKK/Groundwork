@@ -13,7 +13,9 @@ wrap JSON in even when told not to.
 
 from __future__ import annotations
 
+import json
 import re
+from typing import Any
 
 _FENCE_OPEN = re.compile(r"^```[a-zA-Z]*\n?")
 _FENCE_CLOSE = re.compile(r"\n?```$")
@@ -38,4 +40,39 @@ def json_object(raw: str) -> str | None:
     return text[start : end + 1]
 
 
-__all__ = ["json_object"]
+def json_payload(raw: str) -> Any | None:
+    """The JSON object in `raw`, loaded leniently about literal newlines.
+
+    **Why this exists, and why it is not a style preference.** Strict JSON
+    forbids a raw control character inside a string; a newline must be written
+    `\\n`. Sonnet writes multi-paragraph prose into a JSON string field with the
+    paragraph breaks as *actual* newlines, and Gemini escapes them. Both are the
+    same response as far as the model is concerned, and `json.loads` accepts one
+    and rejects the other.
+
+    Found in the Phase 5 live pass, and it was not only a Phase 5 problem: the
+    same failure was dropping whole documents in Phase 4 extraction, where a
+    rejected response means the document contributes **no claims at all**. That
+    is a claim count moving — and therefore a confidence band moving — because a
+    model used a newline. Nothing surfaced it except a warning line in the log.
+
+    `strict=False` is the standard library's own switch for exactly this: it
+    permits control characters inside strings and changes nothing else. The
+    alternative considered and rejected was a regex that escapes newlines inside
+    string literals before parsing — hand-repairing a model response, which is
+    precisely the class of thing AGENTS.md's no-hand-parsing rule exists to stop.
+
+    Returns the loaded object, or None if there is no object or it will not
+    parse even leniently. Callers still hand the result to Pydantic — this
+    decides *whether there is JSON*, never what the fields mean.
+    """
+    payload = json_object(raw)
+    if payload is None:
+        return None
+    try:
+        return json.loads(payload, strict=False)
+    except ValueError:
+        return None
+
+
+__all__ = ["json_object", "json_payload"]

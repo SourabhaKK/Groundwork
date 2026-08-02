@@ -7,12 +7,15 @@ judgement is what keeps the circuit breaker meaningful.
 
 from __future__ import annotations
 
+import logging
 from typing import Protocol
 
 import anthropic
 from google import genai
 from google.genai import errors as genai_errors
 from google.genai import types as genai_types
+
+logger = logging.getLogger(__name__)
 
 
 class ProviderRefusalError(RuntimeError):
@@ -56,6 +59,20 @@ class AnthropicProvider:
         # indexing into content, which is empty when the request was declined.
         if response.stop_reason == "refusal":
             raise ProviderRefusalError(f"{model} declined the request")
+
+        # Truncation is not an exception — it is a 200 with a short answer, and
+        # it cost the Phase 5 live pass a whole report before anyone saw it:
+        # every synthesis call hit the cap, returned unterminated JSON, and the
+        # only visible symptom was three sections saying synthesis did not
+        # complete. `max_tokens` bounds thinking *and* text together, and models
+        # that think by default spend part of the budget before writing
+        # anything, so this is a live risk whenever a cap is tuned. Logged
+        # rather than raised: a truncated response is still the caller's to
+        # judge, and callers already degrade honestly on unparseable output.
+        if response.stop_reason == "max_tokens":
+            logger.warning(
+                "%s hit the max_tokens cap (%d) — output is truncated", model, max_tokens
+            )
 
         return "".join(block.text for block in response.content if block.type == "text")
 

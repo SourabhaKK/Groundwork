@@ -18,7 +18,7 @@ Phase-level tracker. Tick a phase only once every sub-phase under it is ticked *
 - [x] **Phase 2** — Data Gathering Layer — *core complete 31 Jul 2026; 2.5 deferred by design*
 - [x] **Phase 3** — Agent Orchestration (LangGraph) — *complete 1 Aug 2026; 3.5 simplified to a single bounded re-search pass, 4.1 pulled forward as its prerequisite*
 - [x] **Phase 4** — Structured Extraction — *complete 1 Aug 2026, signed off and merged; two limitations disclosed in README §5 rather than fixed — conflict-severity misreads and register filing-history over-fragmentation, the latter needing a Phase 2 rendering decision. See `BUILD_LOG.md` Phase 4.*
-- [ ] **Phase 5** — Report Synthesis & Uncertainty Handling
+- [ ] **Phase 5** — Report Synthesis & Uncertainty Handling — *5.1-5.7 all built and tested 2 Aug 2026 on `phase-5-synthesis`; 5.4 consumed unchanged from Phase 3. Awaiting sign-off and merge — box stays unticked until then, per this tracker's own rule. Cross-provider check passed with zero structural differences; the mock diff found 11 differences, all evidence volume rather than shape. See `BUILD_LOG.md` Phase 5.*
 - [ ] **Phase 6** — API, Frontend, Deployment
 - [ ] **Phase 7** — Testing, Design Note, Audit
 
@@ -92,10 +92,10 @@ Phase-level tracker. Tick a phase only once every sub-phase under it is ticked *
 - [x] 4.3 Deduplication / conflict detection across sources (two sources disagree — this must surface, not silently resolve) — dedup is claim identity (`source_url` + `section` + `text`, fixed in Phase 4; see `BUILD_LOG.md`) plus `merge_claims`; conflict detection is a per-section comparison pass that references claims by list position, mapped back to real ids in code. Conflicts are recorded, never resolved, and both sides of a disagreement stay in the claim list.
 
 ## Phase 5 — Report Synthesis & Uncertainty Handling
-- [ ] 5.1 Business model summary generation (grounded in extracted claims only) — validate output shape against the Phase 0.7 mock
-- [ ] 5.2 Competitive landscape synthesis (structured intensity assessment, not a list) — validate against the Phase 0.7 mock
-- [ ] 5.3 Company quality signals synthesis + explicit signal-strength rating per section
-- [ ] 5.4 **Uncertainty-scoring rule — explicit, testable function, not a design intention:**
+- [x] 5.1 Business model summary generation (grounded in extracted claims only) — validate output shape against the Phase 0.7 mock
+- [x] 5.2 Competitive landscape synthesis (structured intensity assessment, not a list) — validate against the Phase 0.7 mock
+- [x] 5.3 Company quality signals synthesis + explicit signal-strength rating per section
+- [x] 5.4 **Uncertainty-scoring rule — explicit, testable function, not a design intention:**
 
   **Conflict severity, defined first (this rule was previously undefined and is a prerequisite for the scoring logic below):**
   - **MINOR conflict:** sources differ on phrasing or peripheral detail but agree on the core fact (e.g. two sources give slightly different employee-count estimates, or differing dates for the same event within a plausible range).
@@ -136,9 +136,9 @@ Phase-level tracker. Tick a phase only once every sub-phase under it is ticked *
       return MEDIUM
   ```
   This runs per-section, not once per report — each of the 3 sections gets its own confidence band, since evidence density varies by section (Companies House data is usually strong for business model, often weak for quality signals).
-- [ ] 5.5 Render the confidence band visibly per section in the output (badge/label), matching the Phase 0.7 mock — not a disclaimer appended at the end
-- [ ] 5.6 Citation rendering: every claim in the final report links back to its source
-- [ ] 5.7 **Cross-provider prompt consistency check — closes a Round 1 council finding (Executor) that was named but never fixed in Rounds 1–3.** Sonnet (primary) and Gemini 2.0 Flash (fallback) are different model families; the synthesis prompts from 5.1-5.3 must be validated against both, not just written once and assumed to transfer. Run the same synthesis prompt against both providers on the Phase 0.7 mock's underlying evidence and confirm structurally equivalent output (same section shape, citation format, confidence-band rendering) before considering Phase 5 complete — a fallback that produces a differently-shaped report is a real failure mode, not a cosmetic one.
+- [x] 5.5 Render the confidence band visibly per section in the output (badge/label), matching the Phase 0.7 mock — not a disclaimer appended at the end
+- [x] 5.6 Citation rendering: every claim in the final report links back to its source
+- [x] 5.7 **Cross-provider prompt consistency check — closes a Round 1 council finding (Executor) that was named but never fixed in Rounds 1–3.** Sonnet (primary) and Gemini 2.0 Flash (fallback) are different model families; the synthesis prompts from 5.1-5.3 must be validated against both, not just written once and assumed to transfer. Run the same synthesis prompt against both providers on the Phase 0.7 mock's underlying evidence and confirm structurally equivalent output (same section shape, citation format, confidence-band rendering) before considering Phase 5 complete — a fallback that produces a differently-shaped report is a real failure mode, not a cosmetic one.
 
 ## Phase 6 — API, Frontend, Deployment
 - [ ] 6.1 FastAPI `/report` endpoint (async, streams progress if feasible) — built on top of the Phase 0.5 token-gated skeleton

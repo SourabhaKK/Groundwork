@@ -25,6 +25,7 @@ from src.data_sources.sources import EvidenceBundle
 from src.data_sources.tavily import TavilyClient
 from src.data_sources.web_gather import WebSection
 from src.llm.router import LLMRouter, get_router
+from src.report.synthesize import ReportSynthesizer
 
 
 class Extractor(Protocol):
@@ -103,7 +104,11 @@ class AgentDependencies:
             tavily=tavily or TavilyClient(),
             router=resolved_router,
             extractor=extractor or ClaimExtractor(resolved_router),
-            synthesizer=synthesizer or _NotYetSynthesizing(),
+            # Phase 5 replaced the placeholder synthesizer with the real one, on
+            # the same terms as Phase 4 replaced the extractor: the seam and the
+            # graph are unchanged. `_NotYetSynthesizing` stays for the graph
+            # tests, which need a synthesizer that cannot call a model.
+            synthesizer=synthesizer or ReportSynthesizer(resolved_router),
         )
 
     @property
