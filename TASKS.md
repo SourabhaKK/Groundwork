@@ -19,8 +19,8 @@ Phase-level tracker. Tick a phase only once every sub-phase under it is ticked *
 - [x] **Phase 3** — Agent Orchestration (LangGraph) — *complete 1 Aug 2026; 3.5 simplified to a single bounded re-search pass, 4.1 pulled forward as its prerequisite*
 - [x] **Phase 4** — Structured Extraction — *complete 1 Aug 2026, signed off and merged; two limitations disclosed in README §5 rather than fixed — conflict-severity misreads and register filing-history over-fragmentation, the latter needing a Phase 2 rendering decision. See `BUILD_LOG.md` Phase 4.*
 - [x] **Phase 5** — Report Synthesis & Uncertainty Handling — *complete 2 Aug 2026, signed off and merged; 5.4 consumed unchanged from Phase 3. Cross-provider check passed with zero structural differences; the mock diff found 11 differences, all evidence volume rather than shape. A third limitation is now disclosed in README §5 — filing dates reported as the period they cover — which shares the filing-history document, and its root cause, with the enumeration limitation. See `BUILD_LOG.md` Phase 5.*
-- [ ] **Phase 6** — API, Frontend, Deployment
-- [ ] **Phase 7** — Testing, Design Note, Audit
+- [x] **Phase 6** — API, Frontend, Deployment — *complete 2 Aug 2026, signed off and merged; revision `groundwork-00004-2jv` live, cold start measured at 85.3s end to end (~13s container, ~72s agent). 6.1's progress streaming deliberately not built. The deployed run moved a band on the already-disclosed conflict misclassification, so README §5 was updated from "in that run it changed nothing". See `BUILD_LOG.md` Phase 6.*
+- [x] **Phase 7** — Testing, Design Note, Audit — *complete 2 Aug 2026, signed off and merged; no production diff. Four end-to-end scenarios run, the mock structural diff passes (11 differences, none of them shape), 7.1a criteria 1/2/4 pass and 3 fails on the thin-evidence run. A fourth limitation is now disclosed in README §5 — web evidence attributed to a same-named different company — and four correctness findings were disclosed rather than patched. See `BUILD_LOG.md` Phase 7.*
 
 ## Phase 0 — Project Setup & Core Infrastructure
 
