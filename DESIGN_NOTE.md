@@ -260,6 +260,16 @@ start, on submission eve, for a UI the brief says not to polish.
 left rather than absorbed: surfacing it means changing a graph seam, a report
 module, the graph node and their tests, which is not a submission-eve change.
 
+A section's write-up can fail without the report failing, and that part *is*
+built and tested: the section still renders its real band, sources, gaps and
+conflicts from data, and states that the missing element is the written summary
+rather than the evidence. A total provider failure is the opposite case and
+halts the run. What the unsurfaced warnings cost is knowing when it happened —
+on the same Phase 6 deployed run discussed in §5.1, Section 3's prose is absent
+while its band and sources render normally, and the response still reported
+`outcome: complete` with the reason recorded only in the server log. Disclosed
+in README §5 so an evaluator who meets it reads it as designed behaviour.
+
 ---
 
 ## 5. What would change with more time

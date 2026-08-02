@@ -32,6 +32,38 @@ from src.data_sources.sources import SourceType, TaggedDocument
 #: only form the prompts ask for and the only form the validator can check.
 _MARKER = re.compile(r"\[(\d+)\]")
 
+#: Visible length cap on a retrieved title. Sized to keep the source table's
+#: first column readable; the URL beside it is the identifier, the title is the
+#: hint. Some providers return a page's whole opening paragraph as its title.
+_MAX_TITLE_CHARS = 120
+
+
+def clean_title(title: str) -> str:
+    """Make a retrieved title safe to sit inside a markdown table cell.
+
+    Titles arrive verbatim from the search provider and are not ours to trust.
+    Three things get normalised, and only one of them is cosmetic:
+
+    - **`|` is escaped.** This is the load-bearing one. GFM reads a bare pipe as
+      a cell separator, so a title like `"Monzo 2026 Annual Report | Our
+      Numbers"` splits its own row: the surplus cells push `Type` and
+      `Retrieved` along by one and the trailing cell is dropped, leaving the
+      Phase 2.3a authority tier displayed in the date column. That tier is what
+      the confidence rule scores on, so showing it against the wrong source is a
+      grounding-display error, not a layout blemish. Observed on 6 of 23 source
+      rows in the Phase 6 deployed run.
+    - **Whitespace is collapsed**, since an embedded newline ends the row early.
+    - **Length is capped**, because one provider result carried 220 characters
+      of scraped post body as its title.
+
+    Truncation happens before escaping so the cap measures visible characters
+    and cannot slice a `\\|` pair in half.
+    """
+    collapsed = " ".join(title.split())
+    if len(collapsed) > _MAX_TITLE_CHARS:
+        collapsed = collapsed[: _MAX_TITLE_CHARS - 1].rstrip() + "…"
+    return collapsed.replace("|", "\\|")
+
 
 @dataclass(frozen=True)
 class Citation:
@@ -47,7 +79,9 @@ class Citation:
     def label(self) -> str:
         """The display text for the source table's first column."""
         host = self.url.split("//", 1)[-1].split("/", 1)[0]
-        return f"{self.title} · [{host}]({self.url})" if self.title else f"[{host}]({self.url})"
+        if not self.title:
+            return f"[{host}]({self.url})"
+        return f"{clean_title(self.title)} · [{host}]({self.url})"
 
 
 class SectionCitations:
@@ -156,6 +190,7 @@ __all__ = [
     "Citation",
     "SectionCitations",
     "build_citations",
+    "clean_title",
     "markers_in",
     "validate_markers",
 ]
