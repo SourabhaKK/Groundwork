@@ -322,6 +322,17 @@ class ReportSynthesizer:
             warnings.append("empty prose in an otherwise valid response")
             return _PROSE_FAILED, list(parsed.gaps)
 
+        # `gaps` has a list default, so a response that omits the field entirely
+        # validates cleanly and renders a section with no evidence-gaps block —
+        # indistinguishable from a section that genuinely had nothing to state.
+        # Measured on the fallback at the old 2,000-token cap: under budget
+        # pressure Gemini dropped the whole `gaps` array and still closed valid
+        # JSON. Losing the gaps block silently is the worst direction for this
+        # report to fail in, since that block is where the uncertainty the whole
+        # design exists to surface actually gets written down.
+        if isinstance(payload, dict) and "gaps" not in payload:
+            warnings.append("response omitted the gaps field entirely")
+
         logger.info(
             "synthesis %s: %d chars via %s/%s%s",
             section.value,

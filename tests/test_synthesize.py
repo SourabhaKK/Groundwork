@@ -22,6 +22,7 @@ No live provider is called here.
 from __future__ import annotations
 
 import json
+import logging
 from collections.abc import Callable
 from datetime import UTC, datetime
 
@@ -376,3 +377,33 @@ def test_the_resolution_line_states_how_the_company_was_identified() -> None:
     # act on, and Phase 1 made them a list precisely so both survive.
     assert "previous_name" in resolution_line(flagged)
     assert resolution_line(None) == "Not recorded."
+
+
+@pytest.mark.asyncio
+async def test_a_response_that_omits_gaps_entirely_is_recorded_not_silently_accepted(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """`gaps` has a list default, so an omitted field validates cleanly.
+
+    Measured on the real fallback at the old 2,000-token cap: under budget
+    pressure Gemini dropped the whole array and still closed valid JSON. The
+    section then renders with no evidence-gaps block, indistinguishable from one
+    that genuinely had nothing to state — which is the worst direction for this
+    particular report to fail in. The control below is the same response with an
+    explicitly empty `gaps`, which is a real answer and must not warn.
+    """
+    with caplog.at_level(logging.WARNING, logger="src.report.synthesize"):
+        omitted = FakeRouter(lambda _: json.dumps({"prose": "A grounded sentence [1]."}))
+        report = await ReportSynthesizer(omitted)(state())  # type: ignore[arg-type]
+
+    assert "omitted the gaps field entirely" in caplog.text
+    # Still renders — this is a recorded observation, not a failed section.
+    assert len(structural_signature(report).sections) == 3
+    assert "did not complete" not in report
+
+    caplog.clear()
+    with caplog.at_level(logging.WARNING, logger="src.report.synthesize"):
+        empty = FakeRouter(lambda _: json.dumps({"prose": "A sentence [1].", "gaps": []}))
+        await ReportSynthesizer(empty)(state())  # type: ignore[arg-type]
+
+    assert "omitted the gaps field" not in caplog.text

@@ -531,6 +531,51 @@ format --check` clean.
    otherwise.
 5. **~176 search credits** remain of the development reserve.
 
+### Addendum, appended 2 August 2026 during Phase 5 — a bug that was live while the numbers above were measured
+
+**Nothing above has been edited.** This note is appended under this log's own
+rule that a past entry stays an honest record of what was known at the time; it
+exists because the numbers above were measured against a defect nobody had found
+yet, and a reader who takes them as exact would be misled.
+
+**The bug.** `json.loads` rejects a raw control character inside a JSON string.
+Claude writes multi-paragraph prose into a JSON string field with the paragraph
+breaks as *actual* newlines rather than escaped `\n`. Every extraction response
+in this phase was validated with `model_validate_json`, which is strict, so any
+response that happened to contain a literal newline inside a string was
+discarded whole — and a discarded extraction response means **that document
+contributed no claims at all**. The only symptom was a single
+`unusable JSON` warning line in the log, which reads identically to a model
+genuinely returning nonsense.
+
+**Found in Phase 5**, not here, and only because the same failure appeared on the
+synthesis side where it was impossible to miss — it took out the entire report.
+Chasing it there surfaced the same log line against a Companies House
+filing-history document in the same run. Fixed in `src/llm/json_parsing.py` via
+`json_payload`, which loads with the standard library's `strict=False`; the fix
+is described in full in the Phase 5 entry below.
+
+**What this means for the figures above.** The 104-claim first run, the 85
+scored, the 5 conflicts, the 18% quote-verification exclusion rate, the 9 → 7
+officers and 9 → 12 filing-history counts, and the per-document numbers in the
+granularity discussion were all measured while this bug was live. Any document
+whose response contained a literal newline inside a string contributed zero
+claims to those totals, silently.
+
+**They have not been re-measured.** Re-running Phase 4's live pass under the
+fixed parser would cost search credits and model tokens that the remaining
+timeline is better spent elsewhere, and the *conclusions* those numbers support
+do not turn on their exact values — the granularity findings, the entity-warning
+behaviour, the over-fragmentation guard firing, and the conflict misclassification
+were all read from the claims themselves rather than inferred from counts.
+
+**So: treat every figure in the Phase 4 entry as approximate rather than exact,
+and specifically as a floor.** The bug could only ever remove claims, never add
+them, so the true counts under a fixed parser are the same or higher. Do not
+quote these numbers as measurements in the design note without this caveat, and
+do not diff them against any later run as though the two were measured the same
+way — they were not.
+
 ---
 
 ## Phase 5 — Report Synthesis & Uncertainty Handling
@@ -540,7 +585,7 @@ already built in Phase 3 and is **consumed unchanged** — `src/report/confidenc
 has zero edits. Built on branch `phase-5-synthesis`, cut from `main` at `27a9802`.
 Commits `9850d2b`, `b1ef671`. **Not merged: awaiting sign-off.**
 
-**Test status: 414 tests, all passing** (up from 375). `ruff check` and `ruff
+**Test status: 415 tests, all passing** (up from 375). `ruff check` and `ruff
 format --check` clean. No live provider call anywhere in the suite; the live
 pass below was run from a scratch script outside the repo.
 
@@ -735,3 +780,97 @@ inconsistency until you know that.
 5. **A section can fail without the report failing.** `SectionRender.warnings`
    records stripped citations and failed calls; nothing currently surfaces them
    to the API response, and Phase 6 may want to.
+
+### Pre-merge review — three items, all closed before the merge
+
+**1. Does the raised cap reopen truncation risk on the fallback? Measured, not
+assumed — and it found an interaction, running the opposite way.**
+
+The cap was raised to stop Sonnet's default-on adaptive thinking starving
+visible output. The obvious worry is the other side: `thinking_budget=0` was set
+on Gemini in Phase 3 precisely because a 2.5-generation model spends
+`max_output_tokens` on internal reasoning, so a bigger cap might interact with
+that. It does not, and the evidence is direct rather than reasoned. The same
+reputation prompt was run through the **real router with a failing primary**, so
+the fallback was reached via the breaker exactly as an outage would reach it:
+
+| cap | visible chars | prose chars | JSON loads | `gaps` field |
+|---|---|---|---|---|
+| 2,000 | 2,776 | 2,741 | yes | **absent** |
+| 6,000 | 3,553 | 3,110 | yes | present |
+
+**Confirmed independent on the thinking question.** At a 2,000 cap Gemini
+produced 2,741 characters of *visible* prose — roughly 700 tokens. That is
+impossible if internal reasoning were drawing against the same budget: Phase 3
+measured 15 visible tokens at the identical cap with thinking left on. Thinking
+is genuinely off, the whole budget goes to visible text, and raising the ceiling
+only adds headroom. Gemini's natural output is ~900 tokens, nowhere near 6,000,
+so the larger cap introduces no truncation risk on the fallback side.
+
+**But the check found something the raise was not aimed at, and it is worse than
+the thing it was aimed at.** At the old 2,000 cap Gemini **dropped the entire
+`gaps` array** while still closing well-formed JSON. `SectionProse.gaps` carries
+a list default, so that response validated cleanly, and the section rendered
+with no evidence-gaps block at all — indistinguishable from a section that
+genuinely had nothing to state. The uncertainty block is the one the whole
+partial-tolerance design exists to produce, and under budget pressure it is the
+first thing a model drops, because it comes last in the response.
+
+So the old cap was degrading *both* providers, in two different and equally
+invisible ways: truncating the primary into unparseable JSON, and quietly
+shrinking the fallback's honesty. Raising it fixes both. A response that omits
+`gaps` entirely is now recorded as a warning, distinguished from an explicitly
+empty list, with a test and a control pinning the difference — because the fix
+here is not the cap number, which will be wrong again on some future model, but
+making the degradation visible when it happens.
+
+**2. Phase 4's entry has an appended addendum** recording that its numbers were
+measured while the strict-JSON bug was live, that they were not re-measured, and
+that they should be read as a floor rather than as exact. Appended, not edited,
+per this log's own rule.
+
+**3. Date conflation in filing-history extraction — a new finding, disclosed.**
+
+Distinct from the two limitations already on record, and worth separating from
+the enumeration problem it shares a document with. In the Phase 5 live run one
+claim read *"full accounts for the year to 1 September 2025"*. 1 September 2025
+is when those accounts were **filed**; the period they cover ends in February.
+The claim states something its source does not support — Phase 7.1a's third
+criterion — and it does so in the field where it matters most to an underwriter,
+since the period an account covers is what makes a figure current or stale.
+
+**Mechanism, located precisely.** A filing row renders as
+`2025-09-01 — accounts — Full accounts made up to 2025-02-28`. The leading date
+is **the only unlabelled date in any register document**; its meaning is
+positional convention. The period end is present, but as prose inside the
+description. Every other register date carries its label inline —
+`appointed …` / `resigned …` on officers, `notified …` / `ceased …` on PSC,
+`incorporated: …` on the profile.
+
+**Is it systematic? Yes, but narrowly, and the boundary is the useful part of
+the answer.** It does *not* generalise across Companies House metadata: no other
+register document has an unlabelled date for a model to re-label. It does
+generalise *within* filing history, where every accounts and confirmation-
+statement row carries the same two-date shape — so this is a property of that
+document, not a one-off misread of one row. Checked by reading
+`registry_documents` rather than by inference.
+
+That makes the filing-history document responsible for two of the three
+disclosed limitations, with the same root cause in both: how the document is
+rendered, not how the prompt is written. The extraction prompt already spells
+out the correct handling in its own worked example — *"most recently full
+accounts for the year to 28 February 2025, filed on 1 September 2025"* — and the
+model merged them anyway on real data. Same pattern as the enumeration finding:
+a stated instruction that does not survive the document's shape.
+
+**Not fixed under this timeline**, and disclosed in README §5 to the same
+standard as the other two. Labelling the filed date at render time is a small
+change and would likely close it, but it changes what an evidence document
+contains, which is Phase 2's decision to make — the same decision the
+enumeration limitation is already waiting on. Both should be taken together.
+
+**One related absence, recorded so it is not mistaken for the same defect:** the
+register's *next accounts due* date is not rendered into any document, so the
+system cannot claim anything about filing deadlines even though the register
+holds one. The Phase 0.7 mock cites exactly that fact. That is missing evidence,
+not wrong evidence, and it is a gathering gap rather than an extraction one.
