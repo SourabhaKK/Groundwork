@@ -1,8 +1,10 @@
-"""FastAPI skeleton, gated from day one.
+"""The FastAPI service, gated from day one.
 
-/report is deliberately a stub that 501s: the point of building the API in
-Phase 0 is that every later phase is developed and tested against real auth and
-rate-limit constraints, rather than being exempted from them until Phase 6.
+The gate came first on purpose: `/report` was a token-protected, rate-limited
+501 from Phase 0.5, so every later phase was developed against real auth and
+rate-limit constraints rather than being exempted from them until Phase 6.
+Phase 6.1 replaced the stub's body with the real graph. The gate around it did
+not change, which was the point — see `src/api/report.py`.
 """
 
 from __future__ import annotations
@@ -12,10 +14,10 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
-from src.api.auth import require_token
-from src.api.rate_limit import RateLimiter, enforce_rate_limit, get_limiter
+from src.api.rate_limit import RateLimiter, get_limiter
+from src.api.report import router as report_router
 from src.config import get_settings
 from src.data_sources.breakers import breaker_snapshots
 from src.data_sources.search_quota import tracker as search_quota
@@ -40,14 +42,6 @@ app = FastAPI(
     version="0.1.0",
     lifespan=lifespan,
 )
-
-
-class ReportRequest(BaseModel):
-    query: str = Field(
-        min_length=1,
-        max_length=200,
-        description="Company name or Companies House registration number.",
-    )
 
 
 class HealthResponse(BaseModel):
@@ -90,17 +84,9 @@ def health(limiter: RateLimiter = Depends(get_limiter)) -> HealthResponse:
     )
 
 
-@app.post(
-    "/report",
-    status_code=501,
-    dependencies=[Depends(require_token), Depends(enforce_rate_limit)],
-)
-def create_report(request: ReportRequest) -> dict[str, str]:
-    """Not implemented until Phase 6.1 — the gate around it is real from now on."""
-    return {
-        "detail": "Report generation lands in Phase 6.1.",
-        "query": request.query,
-    }
+#: Phase 6.1. The route carries its own auth and rate-limit dependencies, the
+#: same two the Phase 0.5 stub carried.
+app.include_router(report_router)
 
 
 @app.get("/", include_in_schema=False)
