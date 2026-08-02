@@ -110,6 +110,12 @@ def render_candidates(resolution: dict[str, Any]) -> None:
             with right:
                 if st.button("Select", key=f"pick-{candidate['number']}"):
                     st.session_state["pending_query"] = candidate["number"]
+                    # Re-submit, don't just pre-fill: the number goes back
+                    # through the same gate and the same graph, and Phase 1.1
+                    # normalises it. `last_result` is cleared so the candidate
+                    # list cannot briefly redraw over the run it triggered.
+                    st.session_state["auto_submit"] = True
+                    st.session_state.pop("last_result", None)
                     st.rerun()
 
 
@@ -252,9 +258,22 @@ query = st.text_input(
     placeholder="Monzo Bank Ltd — or 09446231",
 )
 
-if st.button("Generate report", type="primary", disabled=not (query and token)):
+submitted = st.button("Generate report", type="primary", disabled=not (query and token))
+
+# `auto_submit` is set by the disambiguation Select button. Both paths run the
+# same request against the same gate — picking a candidate is a re-submission by
+# company number, not a shortcut around the endpoint.
+if (submitted or st.session_state.pop("auto_submit", False)) and query and token:
     with st.spinner("Resolving, gathering, extracting, synthesising… this takes a minute or two."):
-        status, body = request_report(api_url, token, query)
+        st.session_state["last_result"] = request_report(api_url, token, query)
+
+# Rendered outside the button block, from state. A Streamlit button is True only
+# on the run that handled its click, so rendering inside that block meant any
+# later interaction — including the Select button below — reran the script with
+# the block skipped, silently erasing the result and discarding the click. The
+# disambiguation loop could not close because of it.
+if "last_result" in st.session_state:
+    status, body = st.session_state["last_result"]
 
     if status == 200 and isinstance(body, dict):
         render_result(body)
