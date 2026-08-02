@@ -1,6 +1,9 @@
 # AGENTS.md
 
-Operational context for AI coding agents working on this repo. Keep this file short — every line competes for attention budget. Architecture, decision rationale, and the audit trail live in `PRD.md`, `TECH_STACK.md`, `TASKS.md`, and `workflows.md`; don't duplicate them here.
+Repo conventions and hard boundaries — written for coding agents, and equally the
+rules the build itself was held to. Kept short on purpose. Architecture and
+decision rationale live in `DESIGN_NOTE.md`, `TECH_STACK.md` and `BUILD_LOG.md`;
+they are not duplicated here.
 
 ## Stack
 
@@ -51,7 +54,12 @@ streamlit run frontend/app.py
 
 ## Before Any Non-Trivial Change
 
-Read `workflows.md` first. It governs the decision-explanation process for this specific project — state the decision, the reasoning, and the rejected alternative, and wait for confirmation before implementing. This is a project-specific requirement layered on top of the general conventions above, not optional.
+`workflows.md` records the process this project was built under: state the
+decision, the reasoning and the rejected alternative before implementing, and
+log any deviation from `TECH_STACK.md` rather than substituting silently. The
+build log exists because that discipline repeatedly caught things review did
+not — several load-bearing assumptions in this codebase were broken by live
+testing, not by inspection. Keep to it.
 
 ## Commit Conventions
 

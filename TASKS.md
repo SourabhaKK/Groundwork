@@ -149,14 +149,14 @@ Phase-level tracker. Tick a phase only once every sub-phase under it is ticked *
 - [x] 6.5 Full `README.md`: what was built, setup instructions, architecture summary, decisions, how evaluators should test edge cases, the access token needed to use the live demo
 
 ## Phase 7 — Testing, Design Note, Audit
-- [ ] 7.1 End-to-end test runs: one well-documented company, one thin-evidence company, one ambiguous name, one invalid input — confirm confidence bands behave correctly across all four. **Additionally, diff the real built output for the Monzo Bank Ltd run against the Phase 0.7 mock for structural conformance** (section presence, citation format, confidence-band rendering) — closes the loop so the mock isn't just a discarded planning artifact.
-- [ ] 7.1a **Independent quality rubric — deliberately decoupled from the Phase 0.7 mock**, to guard against the mock itself being an unconsciously easy target. Matching the mock's shape is necessary but not sufficient. Score every test run against these criteria, none of which reference the mock:
+- [x] 7.1 End-to-end test runs: one well-documented company, one thin-evidence company, one ambiguous name, one invalid input — confirm confidence bands behave correctly across all four. **Additionally, diff the real built output for the Monzo Bank Ltd run against the Phase 0.7 mock for structural conformance** (section presence, citation format, confidence-band rendering) — closes the loop so the mock isn't just a discarded planning artifact.
+- [x] 7.1a **Independent quality rubric — deliberately decoupled from the Phase 0.7 mock**, to guard against the mock itself being an unconsciously easy target. Matching the mock's shape is necessary but not sufficient. Score every test run against these criteria, none of which reference the mock:
   1. No claim appears without a citation that actually resolves to the source it names.
   2. No section's confidence band is contradicted by its own listed evidence (e.g. a HIGH band resting on 2 claims is a rubric failure regardless of how confident the prose sounds).
   3. No claim states something stronger than its source actually supports (over-generalisation, not just fabrication).
   4. The thin-evidence company's report is visibly, honestly thinner than the well-documented one — if both look similarly confident, the uncertainty mechanism isn't working, no matter how well either matches the mock's format.
 
   A run can pass 7.1's structural diff and still fail this rubric — that's the intended check, not a bug in the process.
-- [ ] 7.2 System design note — **lead with the product and the judgment behind it, not a change-log of tool choices.** Structure: what it does and why it's trustworthy (first) → architecture diagram → key decisions with rejected alternatives → what was deferred and why (Phase 2.5 stretch item goes here if not done) → what would change with more time
-- [ ] 7.3 Full self-audit against the brief's 6 evaluation dimensions — explicit checklist pass
-- [ ] 7.4 Final repo cleanup, commit history sanity check, submission
+- [x] 7.2 System design note — **lead with the product and the judgment behind it, not a change-log of tool choices.** Structure: what it does and why it's trustworthy (first) → architecture diagram → key decisions with rejected alternatives → what was deferred and why (Phase 2.5 stretch item goes here if not done) → what would change with more time
+- [x] 7.3 Full self-audit against the brief's 6 evaluation dimensions — explicit checklist pass
+- [x] 7.4 Final repo cleanup, commit history sanity check, submission

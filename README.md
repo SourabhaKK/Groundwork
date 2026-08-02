@@ -114,11 +114,25 @@ Not fixed, and named here rather than left in a build log: distinguishing "diffe
 
 The mechanism is specific and worth naming, because it points at where the fix belongs. A filing row is rendered as `2025-09-01 — accounts — Full accounts made up to 2025-02-28`. **The leading date is the only unlabelled date anywhere in the register documents** — its meaning is positional convention, nothing more — while the period end sits inside the description as prose. Every other register date is labelled inline where it appears: officers read `appointed 2015-04-21` / `resigned 2026-01-14`, persons with significant control read `notified …` / `ceased …`, and the company profile reads `incorporated: …`. So the conflation risk is **not** general across Companies House metadata; it is localised to the filing-history document — but *within* that document it is systematic rather than a one-off, since every accounts and confirmation-statement row has the same two-date shape.
 
-That makes filing history the source of two of the three limitations named here, and both have the same root: how the document is rendered rather than how the prompt is written. The extraction prompt already demonstrates the correct handling in its own worked example — *"most recently full accounts for the year to 28 February 2025, filed on 1 September 2025"* — and the model still merged the two on real data, which is the same pattern as the enumeration problem above: a stated instruction that does not survive the document's shape. Not fixed under this timeline. Labelling the filed date where it is rendered is a small change, but it is a change to what an evidence document contains, which is a decision the data-gathering layer owns.
+That makes filing history the source of two of the four limitations named here, and both have the same root: how the document is rendered rather than how the prompt is written. The extraction prompt already demonstrates the correct handling in its own worked example — *"most recently full accounts for the year to 28 February 2025, filed on 1 September 2025"* — and the model still merged the two on real data, which is the same pattern as the enumeration problem above: a stated instruction that does not survive the document's shape. Not fixed under this timeline. Labelling the filed date where it is rendered is a small change, but it is a change to what an evidence document contains, which is a decision the data-gathering layer owns.
 
 One related absence, stated so it is not mistaken for the same bug: the register's *next accounts due* date is not rendered into any document at all, so the system cannot make a claim about filing deadlines even though the register holds one. That is missing evidence, not wrong evidence.
 
 The rebrand distinction above matters because the two look the same to a user and have completely different causes. The first was an implementation question and is solved. The second is an absence of data at the source. We report "not found" honestly rather than guessing — an LLM asked to map a trading name to a legal entity was rejected as a fabrication surface at the one step where the register gives us ground truth, and a hand-maintained trading-name table was rejected as unbounded maintenance for arbitrary coverage.
+
+**Web evidence can be attributed to a different company with a similar name (Phase 2.3, found in Phase 7.1).** Resolution pins the subject to one legal entity on the register, and that works. Evidence gathering does not re-verify identity to the same standard, and a specific case defeats the guard that exists for it.
+
+Found by running a deliberately thin-evidence company end to end: ASHGROVE BESPOKE CABINETRY LTD (16259703), registered office in **Tonbridge, Kent**. The web search returned at least three different UK businesses — a cabinetmaker in **Glasgow**, a joinery firm in **Devon**, and a site stating **East Sussex** — and extraction attributed all of them to the subject company.
+
+**No entity warning fired, and the reason is structural rather than a tuning miss.** The system already flags documents that name a different entity — it was built after a Better Business Bureau page for *Monzo, Inc.* (the US company) reached a UK report. That check keys on the subject's distinctive name tokens, and every one of these sources shares the token "Ashgrove". The other half of that fix, anchoring every query to the UK, does not help when all three confusable businesses genuinely are UK companies.
+
+**The property that makes this matter: it is correlated with thin evidence.** A well-documented company dominates its own search results. A small company with a generic-sounding name does not, so the ranking fills with same-named others. The failure mode is worst exactly where an underwriter most needs the report to be careful.
+
+**What contained it, stated because it is the honest half of the finding.** The report did not present the conflated facts confidently. It surfaced the contradiction, printed both locations, and said the evidence did not allow either to be confirmed — the section reads *"Both are reported here without preference… this conflict is a primary reason the evidence in this section supports only a low-confidence account of the business."* The uncertainty mechanism bounded a grounding failure it was not designed to catch. That is reassuring about the architecture and is not a reason to leave the defect: the attribution is still wrong.
+
+Not fixed under this timeline. The fix is to require identity corroboration — a matching registered office, company number or officer name — before a web document may contribute *scoring* claims, leaving uncorroborated ones in the prose as non-scoring. That is a change to the data-gathering layer, the same layer and the same decision the two filing-history limitations above are already waiting on.
+
+**One thing this run also showed about the limitation above it.** The same thin company drew 11 scored register claims almost entirely from enumeration — enough to clear the confidence rule's HIGH threshold with an `official_registry` source present. It reported LOW only because the conflated-entity contradictions tripped the conflict check first. Two defects cancelled, which is precisely how a problem ships looking correct. Full analysis in `docs/phase-7.1-run-results.md`.
 
 **Deferred features, named rather than quietly dropped.** Deeper register analysis (SIC-code changes over time, officer turnover rate, filing punctuality) was scoped as a stretch item and not built — the underlying PSC and filing data is already gathered, tagged and in the evidence bundle, so this is unbuilt analysis rather than missing data. Progress streaming on `/report` was considered and rejected: the decision log delivers what a progress bar would, and delivers it auditably after the fact. Multi-instance-safe rate limiting is not implemented (see §7).
 
@@ -154,7 +168,13 @@ The report comes back as three sections, each opening with a confidence badge th
 
 **Low confidence.** Pick any small, recently-incorporated company with no press coverage — a random active company from the register works. Its report should be visibly thinner: LOW bands, few claims, evidence gaps stated explicitly. If a thin company and a well-documented one look similarly confident, the uncertainty mechanism is not working, and that comparison is the fastest way to check it.
 
-**Invalid input.** `!!!` or a 20-digit number is rejected before any network call.
+**Invalid input.** `!!!` is rejected before any network call — it contains no
+alphanumerics, so it cannot be a company name. Note the honest boundary here: a
+20-digit number like `12345678901234567890` is *not* rejected up front. It
+passes validation, fails the company-number pattern, and is searched as a name,
+returning **not found**. That is a correct and honest outcome, but it costs a
+register call — pre-flight validation only catches input that cannot possibly be
+a company, not input that merely is not one.
 
 ### Access token
 
@@ -205,6 +225,24 @@ Requests are allowed up to 600s server-side, so a slow run has room without the 
 
 ---
 
-## Planning documents
+## 9. Design note
 
-`workflows.md` (process) → `PRD.md` (problem) → `TECH_STACK.md` (locked stack + rejected alternatives) → `TASKS.md` (phased plan). `AGENTS.md` / `CLAUDE.md` carry operational context for AI coding agents. `BUILD_LOG.md` records what actually happened during implementation, including what broke.
+**[`DESIGN_NOTE.md`](DESIGN_NOTE.md)** — what the system does and why it is trustworthy, the architecture, the key decisions with their rejected alternatives, what was deferred, and what would change with more time. Start there if you are reading one document rather than the repo.
+
+---
+
+## Project documents
+
+| Document | What it holds |
+|---|---|
+| [`DESIGN_NOTE.md`](DESIGN_NOTE.md) | The system design note — product, architecture, decisions, deferrals, next steps |
+| [`PRD.md`](PRD.md) | The problem being solved and its scope |
+| [`TECH_STACK.md`](TECH_STACK.md) | Every tool choice with the alternatives rejected and why |
+| [`TASKS.md`](TASKS.md) | The phased build plan, ticked as delivered |
+| [`BUILD_LOG.md`](BUILD_LOG.md) | What *actually* happened per phase, including what broke and what was measured wrong. Past entries are never edited — corrections are appended, so the log stays an honest record rather than a cleaned-up story |
+| [`workflows.md`](workflows.md) | The process the build followed, and the pre-build plan audits |
+| [`docs/phase-7.1-run-results.md`](docs/phase-7.1-run-results.md) | The four end-to-end validation runs, the structural diff, and the independent quality rubric scored against each |
+| [`docs/phase-7.3-self-audit.md`](docs/phase-7.3-self-audit.md) | Self-audit against the brief's six evaluation dimensions, each cited to code |
+| `AGENTS.md` / `CLAUDE.md` | Repo conventions and boundaries |
+
+**On how this was built.** Claude Code was used as the implementation tool throughout. The process in `workflows.md` required every non-trivial decision to be stated with its reasoning and its rejected alternative, and confirmed, before any code was written — and `BUILD_LOG.md` records what each phase actually produced, including the assumptions that live testing broke. Both files are in the repo rather than summarised here, so the judgement behind the code can be read directly rather than taken on trust.
