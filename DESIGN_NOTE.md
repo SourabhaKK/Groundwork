@@ -20,11 +20,15 @@ That much is table stakes for anything built on an LLM. The part I actually
 designed around is the second question an underwriter asks, which is not *what
 does it say* but **how much of this should I believe**.
 
-So the load-bearing feature is not the prose. It is that **each section carries
-its own confidence band, produced by a rule you can read, and the report shows
-its working.** A section tells you how many claims it rests on, what kinds of
-sources those were, what evidence was missing, and where two sources disagreed.
-A thin section says it is thin and looks thin.
+The report reads like prose, but the trustworthy part of this system is
+everything around the prose — every badge, citation, and confidence band is
+computed and rendered by code from data the model never gets to touch. The
+writing is the least important thing this system does correctly.
+
+Concretely: **each section carries its own confidence band, produced by a rule
+you can read, and the report shows its working.** A section tells you how many
+claims it rests on, what kinds of sources those were, what evidence was missing,
+and where two sources disagreed. A thin section says it is thin and looks thin.
 
 Four design commitments make that trustworthy rather than merely stated. Each is
 a structural property of the code, not a promise the model is asked to keep —
@@ -176,12 +180,16 @@ moment the two disagreed, the agent would be re-searching sections that score
 fine, or proceeding on sections it will later mark LOW.
 
 **A contradicted section is deliberately not re-searched.** LOW for
-`major_conflict` is excluded from the recoverable set. The section is
-contradicted, not thin, and the design surfaces conflicts rather than resolving
-them, so spending a credit trying to out-vote one works against that. Honest
-tradeoff, and I want to name it rather than defend it: more evidence *would*
-sometimes adjudicate a conflict, and this declines to try. §5.1 shows this
-decision interacting badly with a real defect.
+`major_conflict` is excluded from the recoverable set.
+
+I chose not to let the agent re-search its way out of a conflict, because more
+evidence isn't the right tool for resolving a contradiction — it's the right
+tool for filling a gap. I'd rather leave a contested claim visibly contested
+than have the system quietly out-vote it with volume.
+
+The honest cost of that choice: more evidence *would* sometimes adjudicate a
+conflict, and this declines to try. §5.1 shows the decision interacting badly
+with a real defect.
 
 **The decision log records the times the agent did nothing.** Every section gets
 an entry every run, carrying the band, the reason, the claim count, and whether
@@ -287,26 +295,40 @@ reproduced independently in Phase 7 testing on different evidence (user counts
 of 10m vs 6.5m vs 9m), so it is a pattern, not an anecdote. The one-pass bound
 on re-search is the only reason it does not compound.
 
-**Phase 7 testing sharpened the fix, and made it cheaper than I had estimated.**
-I had planned this as a second classification pass required to declare the basis
-of each disagreement, and rejected it on cost — it doubles the classification
-spend on every report. Then I read the conflict records themselves. The
-classifier had emitted a MINOR conflict whose own detail text says:
+**Phase 7 testing changed what this fix costs, and that is the reason it is
+first on this list rather than third.**
+
+In Phase 4 I scoped this fix as a *second classification pass* — a separate
+model call per conflict, required to declare the basis of the disagreement — and
+rejected it on cost, because it roughly doubles the classification spend on
+every report. That estimate was wrong, and reading the Phase 7 conflict records
+is what showed it. The classifier had emitted a MINOR conflict whose own
+`detail` field reads:
 
 > "These claims describe two separate foreign transaction charges … **rather
 > than conflicting with each other**, so they represent different fees rather
 > than a genuine disagreement."
 
-The model **already volunteers the basis, unprompted, in a field that already
-exists**. `score_confidence()` reads only `severity`; `detail` is rendered to the
-reader and never inspected. That self-refuting MINOR is the sole reason Monzo's
-business model scored MEDIUM rather than HIGH. A further data point against
-prompt-tuning as the fix: the same $5.2bn/$5bn pair was classified MAJOR in one
-run and MINOR in another, so severity is not stable across runs.
+**The classifier is already writing the correct reasoning into `detail`, and
+`score_confidence()` never reads it.** The rule branches on `severity` alone;
+`detail` is rendered to the reader and otherwise discarded. So the model has
+already done the work the second pass was going to pay for — it diagnosed the
+basis mismatch correctly, unprompted, in a field that already exists on the
+object.
 
-So the change is closer to *making an existing signal load-bearing* than to
-adding a pass — require the basis as a structured field rather than free prose,
-and let a declared basis mismatch downgrade or discard the conflict.
+That drops the fix from *"add a second classification pass"* to *"read a field
+that's already populated."* No extra model call, no extra latency, no extra
+cost per report. The work is to make the basis a structured field rather than
+free prose, and to let a declared basis mismatch downgrade or discard the
+conflict instead of letting `severity` decide alone.
+
+The evidence that this matters rather than being a tidy observation: that single
+self-refuting MINOR is the sole reason Monzo's business model scored MEDIUM
+rather than HIGH. And a further argument against trying to fix this by tuning
+the prompt instead — the same $5.2bn-vs-$5bn valuation pair was classified MAJOR
+in one run and MINOR in another, so `severity` is not stable across runs even
+when the underlying disagreement is identical. The field that stayed correct
+across both was `detail`.
 
 **Why it was not fixed:** the direction of the error is safe. A false MAJOR can
 only *understate* confidence, never inflate it, and both sides of every
@@ -408,13 +430,38 @@ same decision, as §5.2.
 
 ## 6. What I would tell an evaluator to look at first
 
-The disambiguation path and a thin company, in that order. `Sterling Services`
-returns eight real candidates with the information needed to choose between
-them, costs no search credit, and re-submits by registration number when you
-pick one. Then run any small recently-incorporated company and put its report
-next to Monzo's. If the thin one does not look visibly thinner, the uncertainty
-mechanism is not working — and that comparison is faster than reading either
-report end to end.
+Start with the Ashgrove finding in §5.2 and §5.3 — the thin-evidence run where
+two defects cancelled each other out. I would point at it before anything else
+in this repo, and not because it is the worst bug. It is the strongest
+demonstration of the discipline the project was actually built with.
+
+Here is why I rate it that way. In Phase 4 I named a specific risk in writing:
+that a thinly-documented company could clear the HIGH confidence threshold on
+the strength of its filing rows alone, with no press coverage and no trading
+history behind it. In Phase 7 I ran a real company of exactly that shape, and
+the risk materialised precisely as named — eleven scored register claims, enough
+to score HIGH on business model. It reported LOW anyway, because a completely
+separate defect tripped the conflict check one step earlier and hid it.
+
+Every automated signal available said that run was fine. The band was plausible,
+the report was well-formed, the structural diff passed, and three of the four
+rubric criteria passed. **The only thing that caught it was reading the claims
+one by one and asking where each had come from.** A pass/fail check would have
+recorded a healthy run, and the exposure would have gone into the submission
+undetected — not because it was hidden, but because nothing was looking at it
+from the right angle.
+
+That is the habit I would most want judged here: predictions written down early
+enough to be embarrassing later, live runs read rather than counted, and two
+errors that happened to produce a correct-looking answer reported as two errors
+rather than one success. The same habit produced every other finding in §5.
+
+After that, look at the disambiguation path — `Sterling Services` returns eight
+real candidates with what you need to choose between them, costs no search
+credit, and re-submits by registration number when you pick one. Then put any
+small recently-incorporated company's report next to Monzo's. If the thin one
+does not look visibly thinner, the uncertainty mechanism is not working, and
+that comparison is faster than reading either report end to end.
 
 ---
 
