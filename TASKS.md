@@ -18,7 +18,7 @@ Phase-level tracker. Tick a phase only once every sub-phase under it is ticked *
 - [x] **Phase 2** — Data Gathering Layer — *core complete 31 Jul 2026; 2.5 deferred by design*
 - [x] **Phase 3** — Agent Orchestration (LangGraph) — *complete 1 Aug 2026; 3.5 simplified to a single bounded re-search pass, 4.1 pulled forward as its prerequisite*
 - [x] **Phase 4** — Structured Extraction — *complete 1 Aug 2026, signed off and merged; two limitations disclosed in README §5 rather than fixed — conflict-severity misreads and register filing-history over-fragmentation, the latter needing a Phase 2 rendering decision. See `BUILD_LOG.md` Phase 4.*
-- [ ] **Phase 5** — Report Synthesis & Uncertainty Handling — *5.1-5.7 all built and tested 2 Aug 2026 on `phase-5-synthesis`; 5.4 consumed unchanged from Phase 3. Awaiting sign-off and merge — box stays unticked until then, per this tracker's own rule. Cross-provider check passed with zero structural differences; the mock diff found 11 differences, all evidence volume rather than shape. See `BUILD_LOG.md` Phase 5.*
+- [x] **Phase 5** — Report Synthesis & Uncertainty Handling — *complete 2 Aug 2026, signed off and merged; 5.4 consumed unchanged from Phase 3. Cross-provider check passed with zero structural differences; the mock diff found 11 differences, all evidence volume rather than shape. A third limitation is now disclosed in README §5 — filing dates reported as the period they cover — which shares the filing-history document, and its root cause, with the enumeration limitation. See `BUILD_LOG.md` Phase 5.*
 - [ ] **Phase 6** — API, Frontend, Deployment
 - [ ] **Phase 7** — Testing, Design Note, Audit
 
