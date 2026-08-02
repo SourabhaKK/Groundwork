@@ -874,3 +874,241 @@ register's *next accounts due* date is not rendered into any document, so the
 system cannot claim anything about filing deadlines even though the register
 holds one. The Phase 0.7 mock cites exactly that fact. That is missing evidence,
 not wrong evidence, and it is a gathering gap rather than an extraction one.
+
+---
+
+## Phase 6 — API, Frontend, Deployment
+
+**Status:** complete. 6.1, 6.2, 6.3, 6.4, 6.4a and 6.5 all done. Built on branch
+`phase-6-deployment`, cut from `main` at `aff6107`. Commits `1de9a11`,
+`8069a56`. **Not merged: awaiting sign-off.**
+
+**Test status: 422 tests, all passing** (up from 415). `ruff check` and `ruff
+format --check` clean. No live API call anywhere in the suite — see finding 1,
+which is the reason that sentence needed re-earning this phase rather than being
+inherited.
+
+**Built:** the last mile. `src/api/report.py` puts the Phase 3 graph behind the
+Phase 0.5 gate; `frontend/app.py` is a Streamlit client for it;
+`.github/workflows/keep-warm.yml` closes 6.4a; the README is written; and
+revision `groundwork-00004-2jv` is live at
+`https://groundwork-213351312105.europe-west2.run.app`.
+
+**What was already proven and deliberately not rebuilt.** The Dockerfile,
+Secret Manager wiring, the least-privilege runtime service account, the
+`.gcloudignore` build context, `--max-instances=2`, 1Gi memory and startup CPU
+boost were all stood up during Phase 3's parallel deployment task and were
+correct. 6.3 was therefore verified rather than built: Cloud Build logged
+"Building using Dockerfile", not the Buildpacks fallback that a wrong `--source`
+path silently produces. The only infrastructure change this phase is the request
+timeout, 300s → 600s, sized against Phase 5's carry-forward that the wall clock
+is extraction fan-out plus three synthesis calls at up to 6,000 output tokens.
+
+**A stale-revision check worth keeping.** The deployed container was still
+running pre-Phase-3 code — `/health` reported `global_budget: 130` against the
+repo's 80 since Phase 3's credit recalculation. Neither TASKS.md nor this log
+recorded that, and it was found by reading `/health` rather than trusting the
+deployment note. The 130 → 80 flip then served as free proof that the new
+revision was actually serving, rather than a cached one answering.
+
+**The four decisions worth being able to defend:**
+
+- **Only `PROVIDER_FAILURE` is an HTTP error.** `NEEDS_INPUT`, `NOT_FOUND` and
+  `NO_EVIDENCE` are 200s carrying a typed outcome. A company that cannot be
+  found is a *finding* about that company, and disambiguation is the product's
+  best feature — rendering either as a 4xx would make a client display them as
+  faults. `PROVIDER_FAILURE` gets a 503 for the reason `src/config.py` exists:
+  "our providers are down" must never reach a reader wearing the same clothes
+  as "this company is thinly documented". A provider failure still consumes
+  rate-limit budget, pinned by its own test — it cost real calls, and refunding
+  it would make the one path most likely to be retried also free.
+- **No progress streaming**, though 6.1 offers it. The decision log delivers
+  what a progress bar would and delivers it auditably, after the fact, including
+  the steps where the agent decided to do nothing. Deferred explicitly and
+  recorded in README §5 rather than quietly skipped.
+- **The frontend renders and never computes.** Bands, badges, citations and
+  source tables arrive as finished markdown from Phase 5's render-from-data
+  layer. Disambiguation closes the loop — selecting a candidate re-submits by
+  company number, which Phase 1.1 normalises — rather than listing candidates
+  and making the user retype the name, which would be a screenshot of the
+  feature rather than the feature.
+- **The frontend is not separately deployed.** It runs locally against the
+  hosted API; the hosted demo is the Cloud Run URL. A second hosting account, a
+  second secrets path and a second cold start, on submission eve, for a UI the
+  brief says not to polish, was not worth it. `.gcloudignore` already excluded
+  `frontend/`, so no build-context change was needed.
+
+**Deviations and additions beyond the approved proposal:**
+
+1. **`get_report_runner`, a dependency seam not in the proposal.** Reasoning
+   under finding 1 — it was a correctness problem, not a refactor.
+2. **`SectionRender.warnings` is still not surfaced.** Phase 5 carried this
+   forward and the approved proposal said it would be done if it proved small.
+   It does not: `render_report` returns a string, so the warnings are discarded
+   at the `Synthesizer` protocol boundary, and surfacing them means changing a
+   Phase 3 seam, a Phase 5 module, the graph node and their tests. Flagged and
+   left rather than absorbed, per the same proposal's commitment to say so
+   instead of letting it eat Phase 7 time. **Still carried.**
+
+---
+
+### Finding 1 — the endpoint could not be tested without a network, and the suite proved it
+
+The first version of `create_report` built its dependencies and called
+`run_report` inline. It has no seam, so `tests/test_api.py` — which had been
+asserting the 501 stub since Phase 0 — ran the real graph, made a live
+Companies House request, and got back a genuine `401`.
+
+That is a direct breach of AGENTS.md's rule that no unit test reaches an
+external API, and CI runs deliberately without secrets so it would have failed
+there too. It is also the *third* time this project has learned that a
+boundary is only real if something structural enforces it: Phase 4 made a
+fabricated citation unrepresentable rather than discouraged, Phase 5 made the
+report's shape a property of the code rather than of prompt compliance, and
+here the fix is the same shape — a `get_report_runner` dependency the tests
+override, plus a test asserting the default runner is still
+`run_with_real_dependencies`, so the override cannot quietly become the
+production path.
+
+Worth noting what made it visible: the Phase 0 stub tests. They existed only to
+assert a 501 and had no further purpose, and they were the thing that caught
+this.
+
+---
+
+### The live pass — one cold request through the deployed service
+
+Per the approved plan, exactly one live pass, and the cold-start measurement
+was the reason for its ordering. **The service had been warm through every dev
+session, so cold-start behaviour had never actually been measured** — 6.4 asks
+for it explicitly and 6.4a's mitigation is sized against it.
+
+Method: deploy, verify, then leave the service untouched for ~20 minutes so the
+container passed its scale-to-zero window, then issue a cold `POST /report` for
+"Monzo Bank Ltd" as the first traffic to arrive. Confirmed genuinely cold from
+Cloud Run's own logs — a fresh application startup at 16:42:08 UTC, twenty
+minutes after the previous container's at 16:21:59. Real token, real gate, real
+graph, real report. **7 Tavily credits; ~161 → ~154 of the development
+reserve.**
+
+| | |
+|---|---|
+| Cold first request, end to end | **85.3s**, HTTP 200, 69.5 KB |
+| ├ container cold start | ~13s (request arrival → app ready, from log timestamps) |
+| └ agent run | ~72s (app ready → `run finished`) |
+| Warm `/health` after | 0.09s |
+
+**The cold container is the small half.** ~13s of the 85s is the platform; ~72s
+is the agent doing its work, and that cost is identical warm. Worth recording
+because the Round 1 council finding that produced 6.4a assumed the reverse — it
+warned of "a cold container plus a 30-90s agent run" as a compounding problem,
+and the compounding turns out to be roughly 15%. The keep-warm ping is still
+worth having, but the README now states the honest figure rather than implying
+the ping is what makes the demo responsive.
+
+**What held.** Resolution, both gathers, extraction across 19 documents, the
+3.5 re-search branch, synthesis and rendering all ran end to end in the
+container for the first time. Outcome `complete`, 109 claims, 101 scoring, 14
+decisions, a 20,075-character report. The gate returned 401 unauthenticated.
+Quote verification excluded 8 of 109 (7.3%), well below Phase 4's 18% — not
+comparable as a measurement, since Phase 4's figure was taken while the
+strict-JSON bug was live and against different documents, but it is at least
+not worse.
+
+**Filing-history over-enumeration did not dominate this run.** The register
+profile contributed 6 claims and no register URL appeared in the top sources.
+That is not evidence the disclosed limitation is fixed — it is unfixed, and
+untouched this phase — only that it did not manifest severely here.
+
+---
+
+### The finding this run produced: the disclosed conflict misclassification moved a band, and re-search made it worse
+
+Phase 4 disclosed that conflict severity is judged by a model and that it
+misreads figures which differ by *basis* rather than by contradiction. Phase 4
+and Phase 5 both recorded the same caveat: the outcome had been correct **by
+luck**, because the offending claim had already been excluded from scoring for
+an unrelated reason and the rule only counts a conflict when every claim it
+references scores. **That luck ran out here, on the deployed service, on the
+run the README links to.**
+
+Competitive landscape scored **LOW on three MAJOR conflicts**, and reading them,
+all three are the same misreading:
+
+- a $5.2bn valuation against a $5bn Series I round;
+- that Series I against a later employee secondary sale at just under $6bn;
+- a $501m raise against a $600m one.
+
+Different instruments at different dates. All can be true at once. None is a
+contradiction of a core fact, which is what the 5.4 definition requires for
+MAJOR. Every claim involved had scored, so the conflict counted, and the band
+went to LOW.
+
+**The second-order effect, which nobody predicted and which cuts against the
+system's own design.** The decision log records the whole sequence, which is
+what made it readable at all:
+
+1. First pass: competitive landscape scores **LOW (weak_sources, 16 of 16
+   claims)** — the section had drawn SEO content farms, exactly the failure
+   Phase 2 recorded when it chose per-section search depths.
+2. The 3.5 branch fires, correctly, because that is LOW *for a reason more
+   evidence could fix*. Refined query: *"Quantified market share data and
+   competitive positioning metrics from financial services analysts"*. 5
+   results, 2 credits, at the section's own depth.
+3. Second pass: 27 new claims, 16 → 42 scored. **The weak-sources problem is
+   genuinely solved.**
+4. And the section still scores LOW — now for `major_conflict`, because the new
+   evidence brought the valuation figures that the classifier misreads.
+
+**More evidence lowered the confidence.** The agent's adaptive re-search and
+the conflict classifier are currently working against each other: the re-search
+does its job, and the classifier converts the reward into a penalty. The log
+also records the run declining to re-search again, because the loop is bounded
+at one pass — so the bound behaved correctly, and is the only reason this did
+not repeat.
+
+**Not fixed, and the reasoning for not fixing it is unchanged rather than
+convenient.** The direction is still safe: a false MAJOR can only understate
+confidence, never inflate it, and both sides of every disagreement are printed
+for the reader. The fixes were already considered and rejected on evidence in
+Phase 4 — refusing conflicts between figures with different units misses most
+real conflicts, and requiring two independent classification passes doubles the
+cost of every report. What this run adds is *evidence about how much it
+matters*: a section that had been rescued by the agent's best feature was
+dragged back down by it. README §5 has been updated from "in that run it
+changed nothing" to record that it has now changed something, because the
+earlier wording would read as understatement to anyone who ran the demo.
+
+**This is the strongest argument in the repo for the second-pass fix that Phase
+4 sketched** — a classification pass required to state the *basis* of a
+disagreement, giving a denominator or instrument mismatch somewhere to be
+declared. Recommended for the design note's "what would change with more time",
+where it should now outrank the filing-history rendering fix.
+
+---
+
+**Carried forward — what Phase 7 needs to know:**
+
+1. **The deployed revision is `groundwork-00004-2jv` and it is current with this
+   branch.** If anything merges after this, redeploy — and check
+   `/health`'s `global_budget` to confirm the new code is serving, which is how
+   the stale revision was caught this phase.
+2. **7.1's four runs still need credits.** ~154 of the development reserve
+   remain; the four scenarios cost roughly 5-10 each. The live pass above is a
+   fifth data point for the well-documented case, so 7.1 may not need to
+   re-run Monzo — but it is one run, not the structural diff, which is still
+   outstanding.
+3. **`structural_signature()` remains 7.1's diff tool**, unchanged and still
+   validated. The cold-run report markdown is saved outside the repo if 7.1
+   wants to diff this exact run.
+4. **Three limitations are disclosed in README §5, and one of them just got
+   worse.** The conflict misclassification is now observed moving a band on the
+   deployed service; the filing-history enumeration and date-conflation pair
+   are unchanged and still awaiting the Phase 2 rendering decision they were
+   always waiting on.
+5. **`SectionRender.warnings` is still unsurfaced** (deviation 2 above).
+6. **The keep-warm cron has never actually run on a schedule.** It was
+   committed this phase and `workflow_dispatch` is available, but GitHub only
+   begins honouring `schedule` once the workflow is on the default branch —
+   so it does nothing until this branch merges. Worth a manual dispatch after
+   the merge to confirm it goes green rather than assuming it.
