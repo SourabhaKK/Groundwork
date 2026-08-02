@@ -1337,3 +1337,76 @@ in the output, the same criticism Phase 5 made of the strict-JSON bug.
    `src/`, so the running service is functionally current; redeploy only if a
    later change touches source, and confirm via `/health` that the new code is
    serving.
+
+---
+
+### Addendum, appended 3 August 2026 — post-submission-audit deploy, revision `groundwork-00005-scr`
+
+**Nothing above has been edited.** This supersedes carry-forward item 5: a later
+change did touch `src/`, so the redeploy that item made conditional has now
+happened.
+
+**Revision `groundwork-00005-scr`, source commit `157df5f`, created
+2026-08-02 23:48:33 UTC**, serving 100% of traffic. Cloud Build logged "Building
+using Dockerfile", not the Buildpacks fallback. The previous revision was
+`groundwork-00004-2jv`, the one the Phase 6 entry records. Revision config was
+captured before and after and is unchanged: the `groundwork-run` service
+account, 600s timeout, 1Gi/1 CPU, `--max-instances=2`, startup CPU boost, and
+all five Secret Manager bindings.
+
+**Deploy-target discipline, worth restating because the ambient config is a
+trap.** The machine's default `gcloud` project is the developer's unrelated
+startup project. Every call passed `--project=groundwork-demo-765584`
+explicitly, and the source was given as an absolute path rather than `--source=.`
+— the repo root sits one level below the working directory, and the wrong level
+silently falls back to Buildpacks. Both are the traps the Phase 3 deployment
+skeleton already paid for.
+
+**What this revision ships that `00004-2jv` did not:**
+
+1. **Citation titles are escaped, collapsed and length-capped**
+   (`src/report/citations.py::clean_title`). Retrieved titles were interpolated
+   into the source table raw, so a title containing `|` split its own row: with
+   four header columns, GFM dropped the surplus and the Phase 2.3a authority
+   tier rendered in the retrieval-date column. That tier is what the confidence
+   rule scores on, so it was a grounding-display error rather than a cosmetic
+   one. It affected 6 of 23 source rows in the Phase 6 cold-run capture.
+2. **Two disclosures**, no behaviour change: README §5 and `DESIGN_NOTE.md` §4
+   now state that a section's write-up can fail while its band, sources and gaps
+   still render — designed and covered by three tests, but previously undisclosed
+   to a reader. Both are tied to the Phase 6 run discussed above, where Section 3
+   carries the placeholder.
+3. Documentation-consistency fixes (`f60018e`) and the Streamlit disambiguation
+   fix (`8b436c9`). **The frontend fix is in the repo but not in this image** —
+   `.gcloudignore` excludes `frontend/`, which remains correct: the hosted demo
+   is the API, and the Streamlit client runs locally against it.
+
+**Verification, on the hosted URL rather than locally.**
+
+- `/health`: 200 in 0.31s, `global_budget: 80` — the same discriminator that
+  caught the stale revision in Phase 6, confirming the new code is serving.
+- One real `Monzo Bank Limited` report through the deployed endpoint with the
+  real token: **HTTP 200 in 49.3s**, 61 KB, 87 claims, `outcome: complete`,
+  **5 Tavily credits**.
+- **20 of 20 source rows parsed correctly** — every row's Type column holds a
+  valid authority tier and its Retrieved column a valid date, checked
+  positionally rather than by eye. **5 rows contain escaped pipes**, so the fix
+  fired on freshly retrieved data, including a LinkedIn result that did not
+  exist in the Phase 6 capture. No mojibake; citation markers [1]–[8]
+  contiguous.
+- Post-run `/health` confirms the work was real rather than cached: both source
+  breakers present and `closed`, `credits_this_container: 5`, `global_used: 1`.
+
+**The bands moved against the Phase 6 capture, and this is not a regression.**
+That run scored MEDIUM / LOW / HIGH; this one scored MEDIUM / HIGH / LOW —
+competitive landscape rose and reputation fell. Same company, different
+retrieved evidence, and a different call from the conflict classifier, whose
+instability is already on record: Phase 7 finding 3 recorded the *same*
+$5.2bn-vs-$5bn valuation pair being classified MAJOR in one run and MINOR in
+another. Nothing in this deploy touches scoring — `confidence.py` is unchanged
+since Phase 3 — and the rendering fix cannot move a band, since it operates on
+the title string after scoring is complete. Recorded here so a later reader
+comparing the two runs does not read run-to-run variance as a fault introduced
+by the redeploy.
+
+**~132 → ~127 search credits** remain of the development reserve.
