@@ -180,7 +180,9 @@ a company, not input that merely is not one.
 
 ### Access token
 
-`/report` is gated. Send the token from the submission email:
+`/report` is gated by a shared bearer token, provided separately and deliberately not stored in this repository. See the submission communication for the current value, or contact the repo owner. The token is held in Secret Manager and injected at runtime; no credential is committed here or baked into the container image.
+
+Send it as an `Authorization` header:
 
 ```bash
 curl -X POST https://groundwork-213351312105.europe-west2.run.app/report \
@@ -188,6 +190,8 @@ curl -X POST https://groundwork-213351312105.europe-west2.run.app/report \
   -H "Content-Type: application/json" \
   -d '{"query": "Monzo Bank Ltd"}'
 ```
+
+A missing or wrong token returns `401` before any rate-limit budget is consumed.
 
 `/health` needs no token and reports operational state (breaker, budget, search-quota status).
 
