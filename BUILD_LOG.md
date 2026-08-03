@@ -1410,3 +1410,55 @@ comparing the two runs does not read run-to-run variance as a fault introduced
 by the redeploy.
 
 **~132 → ~127 search credits** remain of the development reserve.
+
+---
+
+### Addendum, appended 3 August 2026 — demo token rotated, revision `groundwork-00006-gbb`
+
+**Nothing above has been edited.** Second deploy of the day, and the last one
+before submission.
+
+**The scan came back clean, and the rotation happened anyway.** Before changing
+anything, the live `DEMO_ACCESS_TOKEN` value was searched for across the entire
+history rather than just the working tree — `git log --all -S<value>` returned
+0 commits, and `git grep -F <value>` across all 53 commits returned 0 matches.
+The token had never been committed, and README already used a `<token>`
+placeholder. So there was nothing to redact. It was rotated regardless, on the
+reasoning that a credential handled repeatedly across development sessions
+before being published to an evaluator is worth replacing on principle, not only
+in response to a known leak. Phase 1 recorded three keys reaching session
+transcripts during live testing; that history is the argument.
+
+**Ordering was deliberate.** README was committed first (`bd4094a`, mechanism
+only — the token is provided separately, held in Secret Manager, injected at
+runtime, in neither the repo nor the image), and only then was the value
+rotated. Reversing those two would have briefly published a fresh token
+alongside a README that still pointed at it.
+
+**Revision `groundwork-00006-gbb`, source commit `bd4094a`**, serving 100% of
+traffic, built from the Dockerfile. `demo-access-token` version 3 was added
+while versions 1 and 2 were left enabled, so nothing depended on the new value
+until it was proven to work.
+
+**Verified in this order, and the third check is the one that matters:**
+
+- `GET /health` — 200 in 0.31s, `global_budget: 80`, breaker closed.
+- `POST /report` with the **new** token — **200**, 49.4s, 58.7 KB, a real
+  MONZO BANK LIMITED report: 79 claims, 5 Tavily credits, outcome `complete`.
+- `POST /report` with the **old** token — **401** in 0.07s,
+  `"Missing or invalid access token"`. Rejected before the rate limiter, so a
+  stale credential cannot burn demo budget.
+
+Only after all three passed were versions 2 **and 1** disabled — version 1 was
+an even older enabled version left over from the first Secret Manager wiring on
+1 August, and it had no business still being live. Disabled rather than
+destroyed, so a rollback remains possible during the review window; both should
+be destroyed once the window closes. `/health` was re-checked afterwards and
+still answers 200.
+
+**~127 → ~122 search credits** remain of the development reserve.
+
+**Carried forward, and these are the only two open items:** the keep-warm cron
+has still never been observed running on a schedule, and the repository is still
+private, so the hosted-demo link is of no use to a reader until it is made
+public or the evaluator is added as a collaborator.
