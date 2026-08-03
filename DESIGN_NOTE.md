@@ -73,48 +73,25 @@ filings. It is triage that tells you how much to trust each part of itself.
 
 ## 2. Architecture
 
-```
-                    ┌─────────────────────────────────────────┐
-   query ─────────► │  resolve  (Companies House search)      │
-                    └───────────────┬─────────────────────────┘
-                                    │
-              ┌─────────────────────┼──────────────────────┐
-              ▼                     ▼                      ▼
-      ┌───────────────┐   ┌──────────────────┐        ┌─────────┐
-      │ gather_       │   │ gather_web       │        │  halt   │ ◄── unresolvable,
-      │ registry      │   │ (Tavily, 1 query │        └─────────┘     ambiguous, or
-      │ (filings,     │   │  per section)    │                        no evidence
-      │  officers,    │   └────────┬─────────┘
-      │  PSC)         │            │
-      └───────┬───────┘            │
-              └────────┬───────────┘
-                       ▼
-              ┌─────────────────┐
-              │ assemble_       │   tag every document by source authority
-              │ evidence        │   (registry / self / trade press / review / web)
-              └────────┬────────┘
-                       ▼
-              ┌─────────────────┐
-         ┌───►│ extract         │   one model call per document → EvidenceClaim,
-         │    └────────┬────────┘   each with a quote checked against its source
-         │             ▼
-         │    ┌─────────────────┐
-         │    │ evaluate_       │   score_confidence() per section
-         │    │ sufficiency     │
-         │    └────────┬────────┘
-         │             │
-         │   LOW *and* recoverable?
-         │             │
-         │    ┌────────▼────────┐
-         └────┤ research_gap    │   one targeted re-search per thin section,
-              └─────────────────┘   at that section's own depth. Bounded by a
-                       │            counter on state, not by a missing edge.
-                       ▼
-              ┌─────────────────┐
-              │ synthesize      │   model writes prose only; code renders every
-              └────────┬────────┘   badge, citation, table and gap block
-                       ▼
-                    report
+```mermaid
+flowchart TD
+    q(["company name or number"]) --> res["resolve<br/>Companies House search"]
+
+    res -->|"ambiguous · not found · invalid"| halt(["halt<br/>a typed outcome, not an error"])
+    res -->|resolved| gr["gather_registry<br/>filings · officers · PSC"]
+    res -->|resolved| gw["gather_web<br/>Tavily · one query per section"]
+
+    gr --> asm["assemble_evidence<br/>tag every document by source authority<br/>registry · self · trade press · review · web"]
+    gw --> asm
+
+    asm --> ext["extract<br/>one model call per document → EvidenceClaim<br/>each with a quote checked against its source"]
+    ext --> ev{"evaluate_sufficiency<br/>score_confidence per section"}
+
+    ev -->|"LOW, and more evidence could fix it"| rg["research_gap<br/>one targeted re-search per thin section,<br/>at that section's own depth"]
+    rg --> ext
+
+    ev -->|"sufficient, or LOW for a reason evidence cannot fix"| syn["synthesize<br/>model writes prose only; code renders every<br/>badge, citation, table and gap block"]
+    syn --> rep(["report"])
 ```
 
 A LangGraph state machine over typed Python functions. FastAPI serves it,

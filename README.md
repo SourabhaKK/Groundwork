@@ -28,49 +28,28 @@ The part that matters more than the prose is the confidence rating. Each of the 
 
 A LangGraph state machine over typed Python functions. FastAPI serves it, Streamlit consumes it, Cloud Run hosts it.
 
+```mermaid
+flowchart TD
+    q(["company name or number"]) --> res["resolve<br/>Companies House search"]
+
+    res -->|"ambiguous · not found · invalid"| halt(["halt<br/>a typed outcome, not an error"])
+    res -->|resolved| gr["gather_registry<br/>filings · officers · PSC"]
+    res -->|resolved| gw["gather_web<br/>Tavily · one query per section"]
+
+    gr --> asm["assemble_evidence<br/>tag every document by source authority<br/>registry · self · trade press · review · web"]
+    gw --> asm
+
+    asm --> ext["extract<br/>one model call per document → EvidenceClaim<br/>each with a quote checked against its source"]
+    ext --> ev{"evaluate_sufficiency<br/>score_confidence per section"}
+
+    ev -->|"LOW, and more evidence could fix it"| rg["research_gap<br/>one targeted re-search per thin section,<br/>at that section's own depth"]
+    rg --> ext
+
+    ev -->|"sufficient, or LOW for a reason evidence cannot fix"| syn["synthesize<br/>model writes prose only; code renders every<br/>badge, citation, table and gap block"]
+    syn --> rep(["report"])
 ```
-                    ┌─────────────────────────────────────────┐
-   query ─────────► │  resolve  (Companies House search)      │
-                    └───────────────┬─────────────────────────┘
-                                    │
-              ┌─────────────────────┼──────────────────────┐
-              ▼                     ▼                      ▼
-      ┌───────────────┐   ┌──────────────────┐        ┌─────────┐
-      │ gather_       │   │ gather_web       │        │  halt   │ ◄── unresolvable,
-      │ registry      │   │ (Tavily, 1 query │        └─────────┘     ambiguous, or
-      │ (filings,     │   │  per section)    │                        no evidence
-      │  officers,    │   └────────┬─────────┘
-      │  PSC)         │            │
-      └───────┬───────┘            │
-              └────────┬───────────┘
-                       ▼
-              ┌─────────────────┐
-              │ assemble_       │   tag every document by source authority
-              │ evidence        │   (registry / self / trade press / review / web)
-              └────────┬────────┘
-                       ▼
-              ┌─────────────────┐
-         ┌───►│ extract         │   one model call per document → EvidenceClaim,
-         │    └────────┬────────┘   each with a quote checked against its source
-         │             ▼
-         │    ┌─────────────────┐
-         │    │ evaluate_       │   score_confidence() per section
-         │    │ sufficiency     │
-         │    └────────┬────────┘
-         │             │
-         │   LOW *and* recoverable?
-         │             │
-         │    ┌────────▼────────┐
-         └────┤ research_gap    │   one targeted re-search per thin section,
-              └─────────────────┘   at that section's own depth. Bounded by a
-                       │            counter on state, not by a missing edge.
-                       ▼
-              ┌─────────────────┐
-              │ synthesize      │   model writes prose only; code renders every
-              └────────┬────────┘   badge, citation, table and gap block
-                       ▼
-                    report
-```
+
+Two details in that graph are the point rather than decoration. The gather branches are **two real nodes**, so the concurrency and the per-source failure path are visible in the graph itself. And `extract → evaluate_sufficiency → research_gap → extract` is **a genuine cycle**, exited because a counter on the state says so — not because the edge back is missing.
 
 **Layers.** `src/data_sources/` (register + search clients, source tagging, per-source circuit breakers) → `src/agent/` (resolution, the graph, extraction) → `src/report/` (confidence scoring, synthesis, rendering) → `src/api/` (gate, rate limits, endpoint). `src/llm/` sits beside them: one router and one circuit breaker that every model call in the codebase passes through, so no module talks to a provider SDK directly.
 
