@@ -22,3 +22,11 @@ htmlcov/
 Thumbs.db
 .idea/
 .vscode/
+
+# Keys and credentials
+*.pem
+*.key
+*.p12
+*.pfx
+credentials.json
+service-account*.json
