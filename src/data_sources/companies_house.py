@@ -35,7 +35,7 @@ from __future__ import annotations
 import logging
 import re
 from datetime import date
-from typing import TypeVar
+from typing import Any, TypeVar
 
 import httpx
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
@@ -384,7 +384,7 @@ class CompaniesHouseClient:
         if self._owns_client:
             await self._client.aclose()
 
-    async def _get(self, path: str, params: dict[str, object] | None = None) -> dict:
+    async def _get(self, path: str, params: dict[str, Any] | None = None) -> dict:
         try:
             response = await self._client.get(path, params=params, auth=self._auth)
         except httpx.TimeoutException as exc:

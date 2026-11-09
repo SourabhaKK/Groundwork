@@ -470,6 +470,7 @@ def build_prompt(document: TaggedDocument, bundle: EvidenceBundle) -> str:
     """The full extraction prompt for one document."""
     key = _framing_key(document.source_type)
     assigns_section = document.section is None
+    inherited_section = "" if document.section is None else document.section.value.replace("_", " ")
 
     content = document.content or ""
     if len(content) > MAX_DOCUMENT_CHARS:
@@ -484,7 +485,7 @@ def build_prompt(document: TaggedDocument, bundle: EvidenceBundle) -> str:
         section_rule=(
             _SECTION_RULE_ASSIGNED
             if assigns_section
-            else _SECTION_RULE_INHERITED.format(section=document.section.value.replace("_", " "))
+            else _SECTION_RULE_INHERITED.format(section=inherited_section)
         ),
         title=document.title or "(untitled)",
         url=document.url,

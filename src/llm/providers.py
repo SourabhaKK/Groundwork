@@ -53,7 +53,7 @@ class AnthropicProvider:
         if system is not None:
             kwargs["system"] = system
 
-        response = await self._client.messages.create(**kwargs)  # type: ignore[arg-type]
+        response = await self._client.messages.create(**kwargs)  # type: ignore[call-overload]
 
         # A refusal is a content outcome, not an exception — check it before
         # indexing into content, which is empty when the request was declined.

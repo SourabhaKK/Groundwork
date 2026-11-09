@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from functools import partial
 
 from src.agent.claims import merge_claims
 from src.agent.deps import AgentDependencies
@@ -427,7 +428,7 @@ async def research_node(state: ReportState, deps: AgentDependencies) -> dict:
             # reason `gather_web` does it: a bare closure over the loop variable
             # would send every re-search whichever query the comprehension
             # finished on.
-            lambda r=refinement, d=depth: deps.tavily.search(r.query, depth=d),
+            partial(deps.tavily.search, refinement.query, depth=depth),
             is_transient=is_tavily_transient,
             what=f"{refinement.section.value} re-search",
         )
