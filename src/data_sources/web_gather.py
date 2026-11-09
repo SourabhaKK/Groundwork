@@ -51,6 +51,7 @@ import logging
 import re
 from datetime import UTC, datetime
 from enum import StrEnum
+from functools import partial
 
 from pydantic import BaseModel, Field
 
@@ -253,7 +254,7 @@ async def gather_web(profile: CompanyProfile, client: TavilyClient) -> WebGather
             # Bound as a default argument, not captured: a bare closure over the
             # loop variable would send all three searches whichever query the
             # comprehension finished on.
-            lambda s=section: client.search(queries[s], depth=SECTION_DEPTH[s]),
+            partial(client.search, queries[section], depth=SECTION_DEPTH[section]),
             is_transient=is_tavily_transient,
             what=f"{section.value} search",
         )

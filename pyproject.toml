@@ -18,6 +18,7 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+    "mypy>=2.4.1",
     "pytest>=9.2.0",
     "pytest-asyncio>=1.4.1.post1",
     "ruff>=0.17.3",
@@ -33,6 +34,11 @@ packages = ["src"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+
+[tool.mypy]
+# Not strict: this is the level the code passes today. Tighten it step by step.
+python_version = "3.11"
+ignore_missing_imports = true
 
 [tool.ruff]
 line-length = 100
