@@ -1,0 +1,60 @@
+# Release: decide the next version from .github/versioning.yml and create an annotated tag and a GitHub release.
+# Rules and design: agent-ops docs/VERSIONING.md. Nothing is committed to any branch. Never create tags by hand.
+name: Release
+
+on:
+  push:
+    branches: [main]            # acts only when trigger is every_merge in .github/versioning.yml
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Print the decision only; create nothing"
+        type: boolean
+        default: true
+      level:
+        description: "Force a level (leave empty to decide from the rules)"
+        type: choice
+        options: ["", "patch", "minor", "major", "promote"]
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false     # a second run recomputes from the last tag
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write           # create the tag and the release
+      issues: write             # "Released in" comments
+      pull-requests: read
+      checks: read              # CI must be green on the head commit
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+          persist-credentials: false
+
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+
+      - name: Install the release script's dependencies (hashed, wheels only)
+        run: python -m pip install --require-hashes --only-binary ":all:" -r scripts/release-requirements.txt
+
+      - name: Decide and release
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          REQUIRED_CHECKS: lint,typecheck,test
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
+          LEVEL: ${{ inputs.level }}
+        run: |
+          args=()
+          if [ "$DRY_RUN" = "true" ]; then args+=(--dry-run); fi
+          if [ -n "$LEVEL" ]; then args+=(--level "$LEVEL"); fi
+          python scripts/bump_version.py "${args[@]}"
