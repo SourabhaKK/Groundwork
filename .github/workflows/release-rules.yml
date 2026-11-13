@@ -1,0 +1,30 @@
+# Release rules: run the tests of scripts/bump_version.py in their own small environment (agent-ops onboarding).
+# The app's own test job may not install PyYAML or pydantic, so tests/test_bump_rules.py skips itself there.
+name: Release rules
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  release-rules:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+
+      - name: Install the release script's dependencies (hashed, wheels only)
+        run: python -m pip install --require-hashes --only-binary ":all:" -r scripts/release-requirements.txt
+
+      - name: Test the version rules
+        run: python -m pytest tests/test_bump_rules.py --noconftest -p no:cacheprovider -o addopts= -q

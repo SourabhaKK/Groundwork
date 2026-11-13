@@ -1,0 +1,53 @@
+# Version rules for Groundwork, from agent-ops (its docs/VERSIONING.md: tag mode, strict SemVer).
+# scripts/bump_version.py applies them; tests/test_bump_rules.py checks them. Unknown keys fail.
+# Change them through a normal pull request. A rule change never rewrites past tags.
+scheme: semver
+start_version: 1.0.0            # owner's choice at onboarding (2026-11-13); a repo with a vX.Y.Z tag continues from its latest tag
+mode: tag                       # the version is the latest vX.Y.Z tag; no version file is committed
+trigger: every_merge
+weekly_day: Sunday              # used when trigger is weekly
+freeze_after: null              # ISO date; no releases after it
+highest_wins: true              # several changes since the last tag: highest level wins
+
+bump_by:
+  ticket_type:                  # label on the issue the PR closes
+    fix: patch
+    feature: minor
+    major: minor                # D-008: a big feature is not a breaking change
+  conventional_commit:          # PR title type, used when there is no ticket
+    fix: patch
+    perf: patch
+    refactor: patch
+    revert: patch
+    feat: minor
+    "feat!": major
+    "fix!": major
+    docs: none
+    test: none
+    ci: none
+    chore: none
+    style: none
+    build: none
+  default_level: patch          # nothing matched and a file outside paths_none changed
+  paths_none:                   # a change touching only these paths never bumps
+    - "docs/**"
+    - "*.md"
+    - ".github/**"
+    - "tests/**"
+
+# PR labels, checked first. bump:* labels set the level exactly (bump:none means no release).
+# Every other label here sets a minimum: it can raise the level, never lower it.
+overrides:
+  "bump:major": major
+  "bump:minor": minor
+  "bump:patch": patch
+  "bump:none": none
+  "breaking": major
+  "security": patch
+
+min_level_by_size:              # issue size label; raises a level, never lowers it
+  "size:L": minor
+
+pre_1_0:
+  major_becomes: minor          # while the major number is 0
+  promote_with: "release:1.0"   # PR label, or manual run with level "promote", to reach 1.0.0

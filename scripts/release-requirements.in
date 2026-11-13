@@ -1,0 +1,6 @@
+# Dependencies of scripts/bump_version.py and its tests, for the Release and Release rules workflows (hashed).
+# Regenerate: uv pip compile --universal --generate-hashes --python-version 3.11 --exclude-newer <date 14 days ago> scripts/release-requirements.in -o scripts/release-requirements.txt
+httpx
+pydantic
+pytest
+pyyaml
